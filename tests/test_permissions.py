@@ -12,6 +12,7 @@ from dazi.permissions import (
     _shell_command_matches,
     check_permission,
     derive_permission_pattern,
+    prompt_permission_decisions,
     parse_rule,
     parse_rules,
 )
@@ -153,6 +154,38 @@ class TestShellCommandMatches:
 
     def test_empty_command(self):
         assert _shell_command_matches("", "git *") is False
+
+    # ── Pipeline awareness ──
+
+    def test_pipeline_pipe_matches_subcmd(self):
+        assert _shell_command_matches("cat file | rm /tmp/old", "rm /tmp/*") is True
+
+    def test_pipeline_chain_matches_subcmd(self):
+        assert _shell_command_matches("ls && rm /tmp/old", "rm *") is True
+
+    def test_pipeline_or_chain(self):
+        assert _shell_command_matches("true || rm /tmp/old", "rm *") is True
+
+    def test_pipeline_semicolon(self):
+        assert _shell_command_matches("echo hi; rm /tmp/old", "rm *") is True
+
+    def test_pipeline_no_match(self):
+        assert _shell_command_matches("cat file | grep foo", "rm *") is False
+
+    def test_redirect_not_split(self):
+        # Redirect operators are NOT pipeline splits — echo matches as the command
+        assert _shell_command_matches("echo hi > /tmp/out", "echo *") is True
+
+    def test_redirect_append_not_split(self):
+        assert _shell_command_matches("echo hi >> /tmp/out", "echo *") is True
+
+    def test_pipeline_first_subcmd_match(self):
+        assert _shell_command_matches("rm /tmp/old | cat file", "rm *") is True
+
+    def test_pipeline_multi_pipe(self):
+        assert _shell_command_matches(
+            "cat file | grep foo | rm /tmp/old", "rm /tmp/*"
+        ) is True
 
 
 # ─────────────────────────────────────────────────────────
@@ -318,6 +351,8 @@ class TestCheckPermission:
 
 
 class TestDerivePermissionPattern:
+    # ── File path (unchanged) ──
+
     def test_file_path(self):
         pattern = derive_permission_pattern(
             "file_writer", {"file_path": "/tmp/test.py"}
@@ -330,11 +365,83 @@ class TestDerivePermissionPattern:
         )
         assert pattern == "/home/user/src/*"
 
-    def test_command(self):
+    # ── Subcommand awareness ──
+
+    def test_git_subcommand(self):
         pattern = derive_permission_pattern(
             "shell_exec", {"command": "git push origin main"}
         )
-        assert pattern == "git *"
+        assert pattern == "git push *"
+
+    def test_npm_subcommand(self):
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "npm install lodash"}
+        )
+        assert pattern == "npm install *"
+
+    def test_docker_subcommand(self):
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "docker build -t app ."}
+        )
+        assert pattern == "docker build *"
+
+    def test_non_subcommand_command(self):
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "echo hello world"}
+        )
+        assert pattern == "echo *"
+
+    # ── Path argument awareness ──
+
+    def test_find_with_path(self):
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "find /tmp -name '*.py'"}
+        )
+        assert pattern == "find /tmp/*"
+
+    def test_rm_with_path(self):
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "rm -rf /var/log/app.log"}
+        )
+        assert pattern == "rm /var/log/*"
+
+    def test_ls_with_relative_path(self):
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "ls ./src/components/"}
+        )
+        assert pattern == "ls ./src/components/*"
+
+    # ── URL argument awareness ──
+
+    def test_curl_with_url(self):
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "curl -s https://api.example.com/v1/users"}
+        )
+        assert pattern == "curl https://api.example.com/*"
+
+    def test_wget_with_url(self):
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "wget https://releases.example.com/v2/app.tar.gz"}
+        )
+        assert pattern == "wget https://releases.example.com/*"
+
+    # ── Pipeline awareness ──
+
+    def test_pipeline_picks_most_specific(self):
+        # rm /tmp/old/* is more specific than cat *
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "cat file | rm /tmp/old"}
+        )
+        assert pattern == "rm /tmp/old/*"
+
+    def test_pipeline_with_chain(self):
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "echo ok && git push origin main"}
+        )
+        # "git push *" (10 chars) is more specific than "echo *" (6 chars)
+        assert pattern == "git push *"
+
+    # ── Edge cases ──
 
     def test_no_match(self):
         pattern = derive_permission_pattern("calculator", {"expression": "2+2"})
@@ -342,5 +449,84 @@ class TestDerivePermissionPattern:
 
     def test_empty_command(self):
         pattern = derive_permission_pattern("shell_exec", {"command": ""})
-        # Empty command falls through to return None
         assert pattern is None
+
+    def test_command_flags_only(self):
+        # No non-flag args — fallback to cmd + wildcard
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "ls -la"}
+        )
+        assert pattern == "ls *"
+
+    def test_find_with_current_dir(self):
+        # find . should not become "find *" — it should be "find ./*"
+        pattern = derive_permission_pattern(
+            "shell_exec", {"command": "find . -name '*.py'"}
+        )
+        assert pattern == "find ./*"
+
+
+# ─────────────────────────────────────────────────────────
+# prompt_permission_decisions — "skip" with user message
+# ─────────────────────────────────────────────────────────
+
+
+class TestPromptPermissionDecisions:
+    @pytest.mark.asyncio
+    async def test_allow(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        session = AsyncMock()
+        session.prompt_async = AsyncMock(return_value="y")
+        console = MagicMock()
+        decisions = await prompt_permission_decisions(
+            [{"tool_call_id": "tc1", "tool_name": "shell_exec",
+              "tool_args": {"command": "ls"}, "reason": "test"}],
+            session, console,
+        )
+        assert decisions["tc1"]["action"] == "allow"
+
+    @pytest.mark.asyncio
+    async def test_deny_empty(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        session = AsyncMock()
+        session.prompt_async = AsyncMock(return_value="")
+        console = MagicMock()
+        decisions = await prompt_permission_decisions(
+            [{"tool_call_id": "tc1", "tool_name": "shell_exec",
+              "tool_args": {"command": "ls"}, "reason": "test"}],
+            session, console,
+        )
+        assert decisions["tc1"]["action"] == "deny"
+
+    @pytest.mark.asyncio
+    async def test_deny_no(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        session = AsyncMock()
+        session.prompt_async = AsyncMock(return_value="no")
+        console = MagicMock()
+        decisions = await prompt_permission_decisions(
+            [{"tool_call_id": "tc1", "tool_name": "shell_exec",
+              "tool_args": {"command": "ls"}, "reason": "test"}],
+            session, console,
+        )
+        assert decisions["tc1"]["action"] == "deny"
+
+    @pytest.mark.asyncio
+    async def test_skip_with_message(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        session = AsyncMock()
+        session.prompt_async = AsyncMock(
+            return_value="I already created the folder manually"
+        )
+        console = MagicMock()
+        decisions = await prompt_permission_decisions(
+            [{"tool_call_id": "tc1", "tool_name": "shell_exec",
+              "tool_args": {"command": "mkdir tmp/data"}, "reason": "write"}],
+            session, console,
+        )
+        assert decisions["tc1"]["action"] == "skip"
+        assert decisions["tc1"]["message"] == "I already created the folder manually"

@@ -410,8 +410,15 @@ async def check_permissions(state: AgentState) -> dict:
         decisions = interrupt({"ask_tools": ask_tools})
         for ask in ask_tools:
             tid = ask["tool_call_id"]
-            decision = decisions.get(tid, "deny")
-            if decision == "allow":
+            raw = decisions.get(tid, {"action": "deny"})
+            # Support legacy string format ("allow"/"deny") and new dict format
+            if isinstance(raw, str):
+                decision = {"action": raw}
+            else:
+                decision = raw
+            action = decision.get("action", "deny")
+
+            if action == "allow":
                 pattern = derive_permission_pattern(ask["tool_name"], ask["tool_args"])
                 permission_rules.append(
                     PermissionRule(
@@ -425,6 +432,16 @@ async def check_permissions(state: AgentState) -> dict:
                     if tc["id"] == tid:
                         tc["args"] = ask["tool_args"]
                 allowed_ids.append(tid)
+            elif action == "skip":
+                # Skip execution, inject user's message as tool result.
+                # No rule added — future similar calls will still ASK.
+                user_msg = decision.get("message", "Skipped by user.")
+                denied_messages.append(
+                    ToolMessage(
+                        content=f"SKIPPED by user: {ask['tool_name']} — {user_msg}",
+                        tool_call_id=tid,
+                    )
+                )
             else:
                 permission_rules.append(
                     PermissionRule(

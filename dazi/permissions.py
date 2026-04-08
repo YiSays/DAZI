@@ -20,7 +20,9 @@ import re
 import shlex
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 
 # ─────────────────────────────────────────────────────────
@@ -144,6 +146,9 @@ class PermissionRule:
 def _shell_command_matches(command: str, pattern: str) -> bool:
     """Check if a shell command matches a pattern.
 
+    Pipeline-aware: splits on |, &&, ||, ; and checks each sub-command.
+    A match against ANY sub-command means the whole command matches.
+
     Patterns:
       - "*"              — match all commands
       - "git push"       — exact command match
@@ -155,6 +160,36 @@ def _shell_command_matches(command: str, pattern: str) -> bool:
     if pattern.strip() == "*":
         return True
 
+    subcmds = _split_pipeline(command)
+    if len(subcmds) > 1:
+        return any(_single_command_matches(sc, pattern) for sc in subcmds)
+
+    return _single_command_matches(command, pattern)
+
+
+# Regex to split on pipeline/chain operators, but NOT redirect operators.
+_PIPELINE_RE = re.compile(r'\s*(?:\|\||&&|\||;)\s*')
+
+# Commands whose first arg is a subcommand (not a path/URL target).
+_SUBCOMMAND_COMMANDS = frozenset({
+    "git", "docker", "kubectl", "npm", "yarn", "pnpm",
+    "pip", "uv", "cargo", "go", "gh", "apt", "yum", "brew",
+})
+
+
+def _split_pipeline(command: str) -> list[str]:
+    """Split a shell command at pipeline/chain operators into sub-commands.
+
+    Splits on: |, &&, ||, ;
+    Does NOT split on redirect operators (>, >>, 2>, &>) — those are I/O
+    for the same command, not separate commands.
+    """
+    parts = _PIPELINE_RE.split(command)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _single_command_matches(command: str, pattern: str) -> bool:
+    """Check if a single (non-pipelined) command matches a pattern."""
     try:
         parts = shlex.split(command)
     except ValueError:
@@ -168,10 +203,20 @@ def _shell_command_matches(command: str, pattern: str) -> bool:
         return True
 
     # Wildcard pattern: "git *" matches "git push origin main"
+    # Also handles path-style: "rm /tmp/*" matches "rm /tmp/old"
     if pattern.endswith("*"):
-        base = pattern.rstrip("*").rstrip()
-        return " ".join(parts).startswith(base + " ") or (
-            len(parts) > 0 and parts[0] == base
+        raw = pattern.rstrip("*")
+        base = raw.rstrip()
+        joined = " ".join(parts)
+        # If the raw base ended with / (e.g. "rm /tmp/*" → "rm /tmp/"),
+        # use it directly as a prefix: "rm /tmp/old".startswith("rm /tmp/")
+        if raw.endswith("/"):
+            return joined.startswith(raw) or joined == base
+        # Otherwise require a separator after the base
+        return (
+            joined.startswith(base + " ")
+            or joined.startswith(base + "/")
+            or joined == base
         )
 
     # Prefix pattern: "npm:" matches "npm install"
@@ -371,39 +416,107 @@ def parse_rules(rule_strings: list[str], source: str = "cli") -> list[Permission
 
 
 def derive_permission_pattern(tool_name: str, tool_args: dict) -> str | None:
-    """Derive a permission pattern from tool args for auto-allow rules.
+    """Derive a minimal permission pattern from tool args for auto-allow rules.
+
+    Follows the MINIMAL ALLOWANCE principle — derives the narrowest pattern
+    that would allow similar future operations without over-granting.
 
     Returns a pattern string or None:
       - file tools: directory glob from file_path (e.g., "/tmp/*")
-      - shell tools: command prefix (e.g., "git *")
+      - shell tools: pipeline-aware, most-specific pattern (e.g., "git push *",
+        "find /tmp/*", "curl https://api.example.com/*")
       - other tools: None (match all args)
     """
-    from pathlib import Path
-
     file_path = tool_args.get("file_path", "")
     if file_path:
         parent = str(Path(file_path).parent)
-        if not parent.endswith("/"):
-            parent += "/"
-        return parent + "*"
+        return parent.rstrip("/") + "/*"
 
     command = tool_args.get("command", "")
     if command:
-        parts = command.split(None, 1)
-        return parts[0] + " *" if parts else "*"
+        subcmds = _split_pipeline(command)
+        patterns = [_derive_single_command_pattern(c) for c in subcmds]
+        # Return the most specific (longest) pattern — this is the one that
+        # would be hardest to auto-approve in the future.
+        non_none = [p for p in patterns if p is not None]
+        if non_none:
+            return max(non_none, key=len)
+        return None
 
     return None
+
+
+def _derive_single_command_pattern(command: str) -> str | None:
+    """Derive a minimal permission pattern for a single shell command.
+
+    Priority order (most specific first):
+      1. Known subcommand commands → "git push *", "npm install *"
+      2. Path arguments → "find /tmp/*", "rm /var/log/*"
+      3. URL arguments → "curl https://api.example.com/*"
+      4. Fallback → "echo *"
+    """
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        parts = command.split()
+
+    if not parts:
+        return None
+
+    cmd = parts[0]
+
+    # 1. Known subcommand commands: include the subcommand for precision
+    if cmd in _SUBCOMMAND_COMMANDS and len(parts) >= 2 and not parts[1].startswith("-"):
+        return f"{cmd} {parts[1]} *"
+
+    # Skip flags to find the first meaningful argument
+    args = [p for p in parts[1:] if not p.startswith("-")]
+    if not args:
+        args = parts[1:]  # fallback: include flags if that's all there is
+
+    if args:
+        first_arg = args[0]
+
+        # 2. Path argument: derive directory glob
+        if first_arg.startswith(("/", "./", "~", "../")) or first_arg in (".", ".."):
+            if first_arg.endswith("/"):
+                # Explicitly a directory — use as-is (strip trailing /)
+                directory = first_arg.rstrip("/")
+            elif Path(first_arg).suffix:
+                # Has file extension — treat as file, use parent directory
+                directory = str(Path(first_arg).parent)
+                if first_arg.startswith("./") and not directory.startswith("./"):
+                    directory = "./" + directory
+            else:
+                # No extension — treat as directory itself
+                directory = first_arg.rstrip("/")
+            return f"{cmd} {directory}/*"
+
+        # 3. URL argument: keep scheme + domain, wildcard the path
+        if first_arg.startswith(("http://", "https://")):
+            parsed = urlparse(first_arg)
+            origin = f"{parsed.scheme}://{parsed.netloc}"
+            return f"{cmd} {origin}/*"
+
+    # 4. Fallback: command + wildcard
+    return f"{cmd} *"
 
 
 async def prompt_permission_decisions(
     ask_tools: list[dict],
     session: Any,
     console: Any,
-) -> dict[str, str]:
+) -> dict[str, dict[str, str]]:
     """Prompt user for permission decisions on ASK tools.
 
-    Renders a Rich Panel for each tool and collects allow/deny decisions
+    Renders a Rich Panel for each tool and collects allow/deny/skip decisions
     via prompt_toolkit FormattedText prompt.
+
+    Three responses:
+      - "y" / "yes" → allow (execute the tool, add auto-allow rule)
+      - empty / "n" / "no" → deny (block the tool, add deny rule)
+      - any other text → skip (don't execute, inject user text as result,
+        no rule added — future similar calls will still ASK)
 
     Args:
         ask_tools: List of dicts with tool_call_id, tool_name, tool_args, reason.
@@ -411,12 +524,13 @@ async def prompt_permission_decisions(
         console: Rich Console instance.
 
     Returns:
-        Dict mapping tool_call_id -> "allow" | "deny".
+        Dict mapping tool_call_id -> {"action": "allow"|"deny"|"skip",
+        "message": "<text for skip>"}
     """
     from prompt_toolkit.formatted_text import FormattedText
     from rich.panel import Panel
 
-    decisions: dict[str, str] = {}
+    decisions: dict[str, dict[str, str]] = {}
 
     for ask in ask_tools:
         pattern = derive_permission_pattern(ask["tool_name"], ask["tool_args"])
@@ -435,11 +549,20 @@ async def prompt_permission_decisions(
                 border_style="yellow",
             )
         )
+        console.print(
+            "[dim]  y = allow (add rule) | Enter/n = deny | "
+            "type anything else = skip with your message[/dim]"
+        )
         answer = await session.prompt_async(
-            FormattedText([("bold fg:yellow", " ALLOW? [y/N]: ")])
+            FormattedText([("bold fg:yellow", " ALLOW? [y/N/comment]: ")])
         )
-        decisions[ask["tool_call_id"]] = (
-            "allow" if answer.strip().lower() in ("y", "yes") else "deny"
-        )
+        stripped = answer.strip()
+
+        if stripped.lower() in ("y", "yes"):
+            decisions[ask["tool_call_id"]] = {"action": "allow"}
+        elif stripped.lower() in ("n", "no", ""):
+            decisions[ask["tool_call_id"]] = {"action": "deny"}
+        else:
+            decisions[ask["tool_call_id"]] = {"action": "skip", "message": stripped}
 
     return decisions
