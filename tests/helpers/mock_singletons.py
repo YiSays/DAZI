@@ -1,0 +1,93 @@
+"""Test helpers for mocking _singletons and common test utilities."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+
+
+def patch_singletons(monkeypatch, tmp_path: Path) -> None:
+    """Patch all dazi._singletons attributes with tmp_path-based instances.
+
+    Must be called BEFORE importing modules that use from dazi._singletons import X.
+    """
+    from dazi.background import BackgroundTaskManager
+    from dazi.cost_tracker import CostTracker
+    from dazi.mailbox import Mailbox
+    from dazi.memory import MemoryStore
+    from dazi.mcp_client import MCPManager
+    from dazi.skills import SkillRegistry
+    from dazi.task_store import TaskStore
+    from dazi.team import TeamManager
+    from dazi.teammate import TeammateRunner
+    from dazi.proactive import ProactiveManager
+    from dazi.coordinator import AutonomousTeammate
+    from dazi.worktree import WorktreeManager
+    from dazi.permission_bridge import PermissionBridge
+
+    data_dir = tmp_path / ".dazi"
+    data_dir.mkdir(exist_ok=True)
+
+    instances = {
+        "memory_store": MemoryStore(data_dir / "memory"),
+        "settings_manager": MagicMock(),
+        "cost_tracker": CostTracker(data_dir),
+        "mcp_manager": MCPManager(),
+        "skill_registry": SkillRegistry(),
+        "proactive_manager": ProactiveManager(),
+        "task_store": TaskStore(data_dir / "tasks", list_id="default"),
+        "background_manager": BackgroundTaskManager(data_dir / "background"),
+        "team_manager": TeamManager(),
+        "teammate_runner": TeammateRunner(),
+        "mailbox": Mailbox(),
+        "permission_bridge": PermissionBridge(mailbox=MagicMock()),
+        "autonomous_teammate": AutonomousTeammate(),
+        "worktree_manager": WorktreeManager(),
+    }
+
+    for name, instance in instances.items():
+        monkeypatch.setattr(f"dazi._singletons.{name}", instance)
+
+
+def create_mock_llm(response_text: str = "Mock response") -> AsyncMock:
+    """Create a mock LLM that behaves like ChatOpenAI."""
+    mock_llm = AsyncMock()
+    mock_response = AIMessage(content=response_text)
+    mock_response.response_metadata = {"token_usage": {"prompt_tokens": 10, "completion_tokens": 5}}
+    mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+    mock_llm.astream = AsyncMock(return_value=iter([mock_response]))
+    mock_llm.bind_tools = MagicMock(return_value=mock_llm)
+    return mock_llm
+
+
+def create_mock_tool(name: str, result: str = "mock result") -> MagicMock:
+    """Create a mock StructuredTool."""
+    mock_tool = MagicMock()
+    mock_tool.name = name
+    mock_tool.invoke = MagicMock(return_value=result)
+    mock_tool.coroutine = AsyncMock(return_value=result)
+    return mock_tool
+
+
+def make_messages(pairs: list[tuple[str, str]]) -> list[Any]:
+    """Create a list of BaseMessage from (type, text) tuples.
+
+    Types: "human", "ai", "system", "tool"
+    """
+    type_map = {
+        "human": HumanMessage,
+        "ai": AIMessage,
+        "system": SystemMessage,
+        "tool": ToolMessage,
+    }
+    messages = []
+    for msg_type, text in pairs:
+        cls = type_map.get(msg_type, HumanMessage)
+        if msg_type == "tool":
+            messages.append(cls(content=text, tool_call_id="test"))
+        else:
+            messages.append(cls(content=text))
+    return messages
