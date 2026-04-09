@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from rich.align import Align
+
+from dazi.theme import BORDER, PROMPT
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -40,8 +42,8 @@ console = Console()
 
 def get_mode_badge(mode: str) -> list[tuple[str, str]]:
     if mode == PLAN_MODE:
-        return [("bold fg:yellow", "PLAN")]
-    return [("bold fg:green", "EXECUTE")]
+        return [(PROMPT["mode_plan"], "PLAN")]
+    return [(PROMPT["mode_execute"], "EXECUTE")]
 
 
 def list_rules_table() -> None:
@@ -117,7 +119,7 @@ def show_dazimd_files(dazimd_files: list[DaziMdFile]) -> None:
             Panel(
                 Markdown(merged),
                 title="Merged DAZI.md Content",
-                border_style="blue",
+                border_style=BORDER["primary"],
             )
         )
 
@@ -238,7 +240,7 @@ def show_task_detail(
         Panel(
             "\n".join(lines),
             title=f"Task #{task.id}",
-            border_style="cyan",
+            border_style=BORDER["info"],
         )
     )
 
@@ -398,7 +400,7 @@ def show_mcp_server_detail(server_name: str) -> None:
     if conn.error:
         config_text += f"\nError: {conn.error}"
     console.print(
-        Panel(config_text, title=f"[cyan]{server_name}[/cyan]", border_style="blue")
+        Panel(config_text, title=f"[cyan]{server_name}[/cyan]", border_style=BORDER["primary"])
     )
 
     # Tools
@@ -496,7 +498,7 @@ def show_skill_detail(skill_name: str) -> None:
         Panel(
             "\n".join(lines),
             title=f"Skill: {skill.name}",
-            border_style="cyan",
+            border_style=BORDER["info"],
         )
     )
 
@@ -505,7 +507,7 @@ def show_skill_detail(skill_name: str) -> None:
         Panel(
             Markdown(skill.prompt),
             title="Prompt Template",
-            border_style="blue",
+            border_style=BORDER["primary"],
         )
     )
 
@@ -523,7 +525,9 @@ def add_demo_hook() -> None:
         console.print(f"  [dim][hook] pre_tool_use: {tool_name}({args_display})[/dim]")
         return HookResult()
 
-    _graph_mod.hook_registry.register(HookEvent.PRE_TOOL_USE, logging_hook, priority=100)
+    _graph_mod.hook_registry.register(
+        HookEvent.PRE_TOOL_USE, logging_hook, priority=100
+    )
     console.print("[green]Registered logging hook (priority=100).[/green]")
 
 
@@ -543,7 +547,7 @@ def print_ascii_banner(console: Console, *, version: str) -> None:
         "██║  ██║  ██║ ██║   ███╔╝    ██║",
         "██║  ██║ ███████║  ███╔╝     ██║",
         "██████╔╝ ██╔══██║ ███████╗ ██████╗",
-        "╚════╝   ╚═╝  ╚═╝ ╚══════╝ ╚═════╝",
+        "╚═════╝  ╚═╝  ╚═╝ ╚══════╝ ╚═════╝",
     ]
 
     logo_text = "\n".join(block_lines)
@@ -578,7 +582,7 @@ def print_ascii_banner(console: Console, *, version: str) -> None:
         "\n".join(messages),
         title="[bold cyan]  DAZI  ",
         subtitle=f"[dim]v{version}[/dim]",
-        border_style="bright_cyan",
+        border_style=BORDER["brand"],
         padding=(0, 2),
     )
 
@@ -605,23 +609,8 @@ def print_welcome_message(
     from dazi.llm import _get_model_name
     from dazi.tokenizer import get_context_window
 
-    console.print(
-        Panel(
-            "Commands: /plan, /go, /show, /tools, /rules, /allow, /deny,\n"
-            "          /hooks, /hook, /remember, /forget, /memories,\n"
-            "          /dazimd, /reindex, /compact, /tokens,\n"
-            "          /tasks, /task <id>, /bg, /bg <task_id>,\n"
-            "          /cost, /cost last, /settings, /reload,\n"
-            "          /mcp, /mcp <name>, /mcp connect/disconnect,\n"
-            "          /skills, /skill <name>, /<skill-name> [args],\n"
-            "          /teams, /team <name>, /team create, /team delete,\n"
-            "          /inbox, /send <agent> <msg>, /broadcast <msg>, /shutdown <agent>,\n"
-            "          /proactive, /proactive on, /proactive off, /autonomous,\n"
-            "          /worktree, /worktree create <name>, /worktree finish <name> --keep/--remove,\n"
-            "          /clear, /quit",
-            border_style="blue",
-        )
-    )
+    console.print("[dim]Type /help for commands. Tab to autocomplete. Ctrl+Q to quit.[/dim]")
+
 
     model = _get_model_name()
     settings_rules = settings_manager.get_permission_rules()

@@ -12,6 +12,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable
 
 from rich.console import Console
+
+from dazi.theme import BORDER
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
@@ -44,6 +46,7 @@ from dazi.llm import _get_llm, _get_model_name, _update_proactive_prompt
 from dazi.memory import MemoryEntry
 from dazi.permissions import parse_rule
 from dazi.proactive import ProactiveSource
+from dazi.repl_completer import print_help
 from dazi.repl_display import (
     add_demo_hook,
     list_memories_table,
@@ -104,6 +107,11 @@ async def handle_command(
         )
         return "break"
 
+    # ── /help ──
+    if cmd == "/help":
+        print_help(console)
+        return "continue"
+
     # ── /cost ──
     if cmd == "/cost" or cmd.startswith("/cost "):
         if cmd == "/cost last":
@@ -111,7 +119,7 @@ async def handle_command(
                 Panel(
                     cost_tracker.format_last_session(),
                     title="Previous Session",
-                    border_style="blue",
+                    border_style=BORDER["primary"],
                 )
             )
         else:
@@ -119,7 +127,7 @@ async def handle_command(
                 Panel(
                     cost_tracker.format_summary(),
                     title="Session Cost",
-                    border_style="green",
+                    border_style=BORDER["success"],
                 )
             )
         return "continue"
@@ -226,7 +234,7 @@ async def handle_command(
                 "[bold yellow]PLAN MODE[/bold yellow]\n"
                 "Read-only tools + plan_writer + memory tools + task tools + background tools enabled.\n"
                 "Type /go to exit plan mode.",
-                border_style="yellow",
+                border_style=BORDER["warning"],
             )
         )
         return "continue"
@@ -240,7 +248,7 @@ async def handle_command(
         if PLAN_FILE.exists():
             plan_content = PLAN_FILE.read_text(encoding="utf-8")
             console.print(
-                Panel(Markdown(plan_content), title="[bold green]Plan[/bold green]", border_style="green")
+                Panel(Markdown(plan_content), title="[bold green]Plan[/bold green]", border_style=BORDER["success"])
             )
         console.print("[bold green]EXECUTE MODE[/bold green] -- all tools enabled.")
         return "continue"
@@ -251,7 +259,7 @@ async def handle_command(
             console.print("[dim]No plan file found.[/dim]")
             return "continue"
         console.print(
-            Panel(Markdown(PLAN_FILE.read_text(encoding="utf-8")), title="Plan File", border_style="blue")
+            Panel(Markdown(PLAN_FILE.read_text(encoding="utf-8")), title="Plan File", border_style=BORDER["primary"])
         )
         return "continue"
 
@@ -500,7 +508,7 @@ async def handle_command(
                     "[bold green]PROACTIVE MODE ON[/bold green]\n"
                     "The agent will wake up periodically via tick prompts.\n"
                     "Use /proactive off to stop. Ctrl+C pauses ticks.",
-                    border_style="green",
+                    border_style=BORDER["success"],
                 )
             )
         elif proactive_arg == "off":

@@ -530,6 +530,8 @@ async def prompt_permission_decisions(
     from prompt_toolkit.formatted_text import FormattedText
     from rich.panel import Panel
 
+    from dazi.theme import BORDER
+
     decisions: dict[str, dict[str, str]] = {}
 
     for ask in ask_tools:
@@ -546,7 +548,7 @@ async def prompt_permission_decisions(
                 f"[bold]Reason:[/bold] {ask['reason']}"
                 f"{pattern_display}",
                 title="[yellow]Permission Required[/yellow]",
-                border_style="yellow",
+                border_style=BORDER["warning"],
             )
         )
         console.print(

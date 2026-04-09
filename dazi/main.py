@@ -60,7 +60,8 @@ async def run_repl() -> None:
     import asyncio
     from prompt_toolkit import PromptSession
     from prompt_toolkit.formatted_text import FormattedText
-    from prompt_toolkit.history import FileHistory
+    from dazi.repl_completer import get_prompt_session_kwargs
+    from dazi.theme import PROMPT as _P
 
     # Load DAZI.md at startup
     global dazimd_files
@@ -95,11 +96,9 @@ async def run_repl() -> None:
     print_welcome()
 
     # Create .dazi directory if it doesn't exist
-    (DATA_DIR / ".dazi" / "chat").mkdir(parents=True, exist_ok=True)
-    session = PromptSession(
-        history=FileHistory(DATA_DIR / ".dazi" / "chat" / "history")
-    )
+    (DATA_DIR / "chat").mkdir(parents=True, exist_ok=True)
     state: dict = {"mode": EXECUTE_MODE, "messages": []}
+    session = PromptSession(**get_prompt_session_kwargs(state))
 
     try:
         while True:
@@ -120,46 +119,58 @@ async def run_repl() -> None:
                 token_pct = (token_count / context_window * 100) if context_window > 0 else 0
 
                 warning_state = get_token_warning_state(display_msgs, model) if display_msgs else "ok"
-                token_color = {"ok": "green", "warning": "yellow", "compact": "red"}.get(warning_state, "white")
+                token_style = {
+                    "ok": _P["token_ok"],
+                    "warning": _P["token_warning"],
+                    "compact": _P["token_compact"],
+                }.get(warning_state, "fg:white")
 
-                info_parts = [f"{token_pct:.0f}%"]
+                # Build dot-separated segments
+                segments: list[tuple[str, str]] = [
+                    *mode_badge,
+                    ("", " "),
+                    (token_style, f"{token_pct:.0f}%"),
+                ]
+
+                # Special badges (PROACTIVE, AUTONOMOUS, WT)
                 if proactive_manager.is_proactive_active():
                     badge = "PAUSED" if proactive_manager.is_proactive_paused() else "ACTIVE"
-                    info_parts.insert(0, f"[PROACTIVE:{badge}]")
+                    segments += [(_P["separator"], " \u00b7 "), ("bold fg:yellow", f"PRO:{badge}")]
                 autonomous_handles = autonomous_teammate.list_handles()
                 if autonomous_handles:
                     active_count = len([h for h in autonomous_handles if h.status.value in ("active", "idle", "spawning")])
-                    info_parts.insert(0, f"[AUTONOMOUS:{active_count}]")
+                    segments += [(_P["separator"], " \u00b7 "), ("fg:cyan", f"AUTO:{active_count}")]
                 active_worktrees = worktree_manager.list_all()
                 if active_worktrees:
-                    info_parts.insert(0, f"[WT:{len(active_worktrees)}]")
+                    segments += [(_P["separator"], " \u00b7 "), ("fg:cyan", f"WT:{len(active_worktrees)}")]
+
+                # Optional info items
+                optional_items: list[str] = []
                 if rule_count:
-                    info_parts.append(f"{rule_count} rules")
+                    optional_items.append(f"{rule_count} rules")
                 if mem_count:
-                    info_parts.append(f"{mem_count} mem")
+                    optional_items.append(f"{mem_count} mem")
                 if tsk_count:
-                    info_parts.append(f"{tsk_count} tasks")
+                    optional_items.append(f"{tsk_count} tasks")
                 if bg_active:
-                    info_parts.append(f"{bg_active} bg")
+                    optional_items.append(f"{bg_active} bg")
                 mcp_tools_count = len(mcp_manager.get_tools())
                 if mcp_tools_count:
-                    info_parts.append(f"{mcp_tools_count} mcp")
+                    optional_items.append(f"{mcp_tools_count} mcp")
                 if _teams.active_team_name:
-                    info_parts.append(f"{_teams.active_team_name}")
-                cost_str = cost_tracker.format_cost()
-                info_parts.append(cost_str)
-                info_text = "[" + " | ".join(info_parts) + "]"
+                    optional_items.append(_teams.active_team_name)
+                optional_items.append(cost_tracker.format_cost())
 
-                user_input = await session.prompt_async(
-                    FormattedText(
-                        [
-                            ("", "\n"),
-                            *mode_badge,
-                            (f"fg:{token_color}", f" {info_text} "),
-                            ("bold fg:green", "You: "),
-                        ]
-                    ),
-                )
+                for item in optional_items:
+                    segments += [(_P["separator"], " \u00b7 "), (_P["dim"], item)]
+
+                # Prompt line
+                segments += [
+                    ("", "\n"),
+                    (_P["primary"], "\u276f "),
+                ]
+
+                user_input = await session.prompt_async(FormattedText(segments))
                 if not user_input.strip():
                     continue
 

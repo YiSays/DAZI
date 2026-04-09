@@ -7,6 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from dazi._singletons import mailbox, team_manager
+from dazi.theme import BORDER
 from dazi.task_store import TaskStore
 from dazi.team import TEAM_LEAD_NAME
 
@@ -98,7 +99,7 @@ def show_team_detail(team_name: str) -> None:
         Panel(
             "\n".join(lines),
             title=f"Team: {team.name}",
-            border_style="cyan",
+            border_style=BORDER["info"],
         )
     )
 

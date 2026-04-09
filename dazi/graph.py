@@ -568,12 +568,24 @@ app = graph.compile(checkpointer=checkpointer)
 # ─────────────────────────────────────────────────────────
 
 
-def format_tool_call(tool_call: dict) -> str:
+def _print_tool_call_compact(tool_call: dict) -> None:
+    """Print a tool call in compact single-line format."""
     name = tool_call["name"]
     args = str(tool_call["args"])
-    if len(args) > 200:
-        args = args[:200] + "..."
-    return f"[bold cyan]{name}[/bold cyan]({args})"
+    if len(args) > 120:
+        args = args[:120] + "..."
+    console.print(f"  [dim]\u2502[/dim] [bold cyan]{name}[/bold cyan]([dim]{args}[/dim])")
+
+
+def _print_tool_result_compact(content: str, *, is_error: bool = False) -> None:
+    """Print a tool result in compact single-line format."""
+    first_line = content.split("\n")[0]
+    if len(first_line) > 120:
+        first_line = first_line[:120] + "..."
+    if is_error:
+        console.print(f"  [red]\u2514 {first_line}[/red]")
+    else:
+        console.print(f"  [dim]\u2514 {first_line}[/dim]")
 
 
 async def _stream_and_display(
@@ -584,8 +596,9 @@ async def _stream_and_display(
     """Consume astream_events and print live output to console.
 
     Shows a spinner until the first output arrives, then renders streaming
-    content: on_chat_model_stream (accumulate text, render as Markdown),
-    on_chat_model_end (tool call panels), and on_tool_end (tool results).
+    content: on_chat_model_stream (accumulate text, render as Markdown with
+    DAZI: prefix), on_chat_model_end (compact tool call lines), and
+    on_tool_end (compact result lines).
     """
     accumulated_text = ""
     status = console.status(f"[bold cyan]{status_label}[/bold cyan]")
@@ -606,20 +619,16 @@ async def _stream_and_display(
                 output = event["data"]["output"]
                 if status._live.is_started:
                     status.stop()
-                # Render accumulated text as Markdown
+                # Render accumulated text with DAZI: prefix
                 if accumulated_text.strip():
+                    console.print()
+                    console.print("[bold cyan]DAZI:[/bold cyan]")
                     console.print()
                     console.print(Markdown(accumulated_text))
                     accumulated_text = ""
-                # Print tool calls from the full response
+                # Print tool calls in compact format
                 for tc in output.tool_calls:
-                    console.print(
-                        Panel(
-                            format_tool_call(tc),
-                            title=f"[cyan]Tool Call{label_suffix}[/cyan]",
-                            border_style="cyan",
-                        )
-                    )
+                    _print_tool_call_compact(tc)
 
             elif kind == "on_tool_end":
                 tool_output = event["data"]["output"]
@@ -627,29 +636,17 @@ async def _stream_and_display(
                 content = str(raw)[:500]
                 if len(str(raw)) > 500:
                     content += "\n... (truncated)"
-                if (
-                    content.startswith("DENIED")
-                    or content.startswith("BLOCKED")
-                    or content.startswith("REQUIRES")
-                ):
-                    console.print(
-                        Panel(
-                            content,
-                            title=f"[red]Permission{label_suffix}[/red]",
-                            border_style="red",
-                        )
-                    )
-                else:
-                    console.print(
-                        Panel(
-                            content,
-                            title=f"[dim]Tool Result{label_suffix}[/dim]",
-                            border_style="dim",
-                        )
-                    )
+                is_error = content.startswith("DENIED") or content.startswith("BLOCKED") or content.startswith("REQUIRES")
+                _print_tool_result_compact(content, is_error=is_error)
     finally:
         if status._live.is_started:
             status.stop()
+        # Handle edge case: text accumulated but stream ended without on_chat_model_end
+        if accumulated_text.strip():
+            console.print()
+            console.print("[bold cyan]DAZI:[/bold cyan]")
+            console.print()
+            console.print(Markdown(accumulated_text))
 
 
 # ─────────────────────────────────────────────────────────
@@ -773,11 +770,13 @@ def display_background_notifications(
             for out_line in output.splitlines()[-10:]:
                 lines.append(f"  [dim]{out_line}[/dim]")
 
+        from dazi.theme import BORDER as _BORDER
+
         border_style = {
-            BackgroundTaskStatus.COMPLETED: "green",
-            BackgroundTaskStatus.FAILED: "red",
+            BackgroundTaskStatus.COMPLETED: _BORDER["success"],
+            BackgroundTaskStatus.FAILED: _BORDER["error"],
             BackgroundTaskStatus.KILLED: "bold red",
-        }.get(task.status, "blue")
+        }.get(task.status, _BORDER["primary"])
 
         console.print(
             Panel(
