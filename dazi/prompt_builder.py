@@ -226,7 +226,8 @@ You are in PLAN MODE. Rules:
         section = "## Current Mode: EXECUTE\nAll tools enabled."
 
     if has_plan:
-        section += "\n\nNote: A plan file exists. Read it first if relevant."
+        from dazi._singletons import PLAN_FILE
+        section += f"\n\nNote: A plan file exists at `{PLAN_FILE}`. Read it first if relevant."
 
     return section
 

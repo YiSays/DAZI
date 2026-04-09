@@ -42,8 +42,14 @@ console = Console()
 
 def get_mode_badge(mode: str) -> list[tuple[str, str]]:
     if mode == PLAN_MODE:
-        return [(PROMPT["mode_plan"], "PLAN")]
-    return [(PROMPT["mode_execute"], "EXECUTE")]
+        return [
+            (PROMPT["mode_plan"], "PLAN MODE"),
+            (PROMPT["dim"], " (Shift+Tab to switch)"),
+        ]
+    return [
+        (PROMPT["mode_execute"], "EXEC MODE"),
+        (PROMPT["dim"], " (Shift+Tab to switch)"),
+    ]
 
 
 def list_rules_table() -> None:

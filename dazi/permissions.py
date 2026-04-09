@@ -556,7 +556,7 @@ async def prompt_permission_decisions(
             "type anything else = skip with your message[/dim]"
         )
         answer = await session.prompt_async(
-            FormattedText([("bold fg:yellow", " ALLOW? [y/N/comment]: ")])
+            FormattedText([("bold fg:ansiyellow", " ALLOW? [y/N/comment]: ")])
         )
         stripped = answer.strip()
 

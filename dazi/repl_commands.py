@@ -226,15 +226,15 @@ async def handle_command(
     # ── /plan ──
     if cmd == "/plan":
         if state["mode"] == PLAN_MODE:
-            console.print("[yellow]Already in plan mode.[/yellow]")
+            console.print("[blue]Already in plan mode.[/blue]")
             return "continue"
         state["mode"] = PLAN_MODE
         console.print(
             Panel(
-                "[bold yellow]PLAN MODE[/bold yellow]\n"
+                "[bold blue]PLAN MODE[/bold blue]\n"
                 "Read-only tools + plan_writer + memory tools + task tools + background tools enabled.\n"
                 "Type /go to exit plan mode.",
-                border_style=BORDER["warning"],
+                border_style=BORDER["primary"],
             )
         )
         return "continue"

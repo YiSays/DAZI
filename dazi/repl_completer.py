@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import Completer, Completion, CompleteEvent
+from prompt_toolkit.shortcuts.prompt import CompleteStyle
 from prompt_toolkit.document import Document
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
@@ -168,7 +169,7 @@ class SlashCommandCompleter(Completer):
                     token_part = sub.name.split()[-1]
                     if token_part.startswith(partial):
                         yield Completion(
-                            text=token_part[len(partial):],
+                            text=token_part,
                             start_position=-len(partial),
                             display=sub.name,
                             display_meta=sub.description,
@@ -189,7 +190,7 @@ class SlashCommandCompleter(Completer):
         for entry in COMMAND_REGISTRY:
             if entry.name.startswith(partial):
                 yield Completion(
-                    text=entry.name[len(partial):],
+                    text=entry.name,
                     start_position=-len(partial),
                     display=entry.name,
                     display_meta=f"[{entry.category}] {entry.description}",
@@ -197,7 +198,7 @@ class SlashCommandCompleter(Completer):
         for entry in _build_skill_commands():
             if entry.name.startswith(partial):
                 yield Completion(
-                    text=entry.name[len(partial):],
+                    text=entry.name,
                     start_position=-len(partial),
                     display=entry.name,
                     display_meta=f"[{entry.category}] {entry.description}",
@@ -284,6 +285,7 @@ def get_prompt_session_kwargs(state: dict) -> dict:
     return {
         "history": FileHistory(DATA_DIR / "chat" / "history"),
         "completer": SlashCommandCompleter(),
+        "complete_style": CompleteStyle.COLUMN,
         "auto_suggest": AutoSuggestFromHistory(),
         "complete_while_typing": False,
         "key_bindings": _build_repl_key_bindings(state),

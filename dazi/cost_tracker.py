@@ -197,9 +197,9 @@ class CostTracker:
     def format_cost(self) -> str:
         """Format total cost for display.
 
-        Example: "$0.0234"
+        Example: "$0.02"
         """
-        return f"${self.get_total_cost():.4f}"
+        return f"${self.get_total_cost():.2f}"
 
     def format_summary(self) -> str:
         """Multi-line summary with per-model breakdown.

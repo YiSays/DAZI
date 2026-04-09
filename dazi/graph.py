@@ -619,11 +619,11 @@ async def _stream_and_display(
                 output = event["data"]["output"]
                 if status._live.is_started:
                     status.stop()
-                # Render accumulated text with DAZI: prefix
-                if accumulated_text.strip():
+                has_tool_calls = bool(output.tool_calls)
+                # Only show DAZI: prefix for pure text responses (no tool calls)
+                if accumulated_text.strip() and not has_tool_calls:
                     console.print()
-                    console.print("[bold cyan]DAZI:[/bold cyan]")
-                    console.print()
+                    console.print("[bold cyan]DAZI:[/bold cyan] ", end="")
                     console.print(Markdown(accumulated_text))
                     accumulated_text = ""
                 # Print tool calls in compact format
@@ -644,8 +644,7 @@ async def _stream_and_display(
         # Handle edge case: text accumulated but stream ended without on_chat_model_end
         if accumulated_text.strip():
             console.print()
-            console.print("[bold cyan]DAZI:[/bold cyan]")
-            console.print()
+            console.print("[bold cyan]DAZI:[/bold cyan] ", end="")
             console.print(Markdown(accumulated_text))
 
 

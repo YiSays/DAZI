@@ -22,14 +22,14 @@ RICH: dict[str, str] = {
 
 # prompt_toolkit FormattedText styles — ("style", "text") tuples
 PROMPT: dict[str, str] = {
-    "mode_execute": "bold fg:green",
-    "mode_plan": "bold fg:yellow",
-    "primary": "fg:cyan",
-    "dim": "fg:dim",
-    "separator": "fg:dim",
-    "token_ok": "fg:green",
-    "token_warning": "fg:yellow",
-    "token_compact": "fg:red",
+    "mode_execute": "bold fg:ansigreen",
+    "mode_plan": "bold fg:ansiblue",
+    "primary": "fg:ansicyan",
+    "dim": "noinherit fg:ansigray",
+    "separator": "noinherit fg:ansigray",
+    "token_ok": "fg:ansigreen",
+    "token_warning": "fg:ansiyellow",
+    "token_compact": "fg:ansired",
 }
 
 # Panel border_style values — Panel(border_style=...)

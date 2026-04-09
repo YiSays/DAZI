@@ -135,14 +135,14 @@ async def run_repl() -> None:
                 # Special badges (PROACTIVE, AUTONOMOUS, WT)
                 if proactive_manager.is_proactive_active():
                     badge = "PAUSED" if proactive_manager.is_proactive_paused() else "ACTIVE"
-                    segments += [(_P["separator"], " \u00b7 "), ("bold fg:yellow", f"PRO:{badge}")]
+                    segments += [(_P["separator"], " \u00b7 "), (_P["mode_plan"], f"PRO:{badge}")]
                 autonomous_handles = autonomous_teammate.list_handles()
                 if autonomous_handles:
                     active_count = len([h for h in autonomous_handles if h.status.value in ("active", "idle", "spawning")])
-                    segments += [(_P["separator"], " \u00b7 "), ("fg:cyan", f"AUTO:{active_count}")]
+                    segments += [(_P["separator"], " \u00b7 "), (_P["primary"], f"AUTO:{active_count}")]
                 active_worktrees = worktree_manager.list_all()
                 if active_worktrees:
-                    segments += [(_P["separator"], " \u00b7 "), ("fg:cyan", f"WT:{len(active_worktrees)}")]
+                    segments += [(_P["separator"], " \u00b7 "), (_P["primary"], f"WT:{len(active_worktrees)}")]
 
                 # Optional info items
                 optional_items: list[str] = []
