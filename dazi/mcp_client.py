@@ -15,7 +15,7 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from langchain_core.tools import StructuredTool
@@ -24,6 +24,63 @@ from pydantic import BaseModel, Field, create_model
 from dazi.base import DaziTool, ToolSafety
 
 logger = logging.getLogger(__name__)
+
+
+def _clear_task_cancellation() -> None:
+    """Clear pending asyncio cancellation requests on the current task."""
+    task = asyncio.current_task()
+    if task is not None:
+        try:
+            while task.cancelling() > 0:
+                task.uncancel()
+        except (AttributeError, RuntimeError):
+            pass  # Python < 3.11 or already-uncancelled task
+
+
+def _force_cleanup_stale_scopes() -> None:
+    """Force-remove any stale anyio cancel scopes left after MCP disconnect.
+
+    When _cleanup_connection() exits session/stdio CMs, the anyio cancel scopes
+    inside those CMs may not be properly exited (the exit raises and is caught
+    by our except BaseException handler). This leaves stale scopes on the task's
+    cancel scope stack with cancel_called=True and pending _deliver_cancellation
+    retry handles, causing infinite task.cancel() on every event loop iteration.
+    """
+    from anyio._backends._asyncio import _task_states
+
+    task = asyncio.current_task()
+    if task is None:
+        return
+    ts = _task_states.get(task)
+    if ts is None:
+        return
+
+    scope = ts.cancel_scope
+    cleaned = 0
+    while scope is not None:
+        parent = scope._parent_scope
+        if scope._active and scope._cancel_called:
+            # Rewire child scopes to skip over this stale scope,
+            # so their __exit__ won't re-add the host task here
+            for child in list(scope._child_scopes):
+                child._parent_scope = parent
+                if parent is not None:
+                    parent._child_scopes.add(child)
+            scope._child_scopes.clear()
+
+            scope._tasks.discard(task)
+            if scope._cancel_handle is not None:
+                scope._cancel_handle.cancel()
+                scope._cancel_handle = None
+            scope._active = False
+            scope._host_task = None
+            cleaned += 1
+            if ts.cancel_scope is scope:
+                ts.cancel_scope = parent
+        scope = parent
+    if cleaned:
+        logger.info(f"Force-cleaned {cleaned} stale anyio cancel scope(s)")
+    _clear_task_cancellation()
 
 
 # ─────────────────────────────────────────────────────────
@@ -65,8 +122,9 @@ class MCPConnectionError(Exception):
 # ─────────────────────────────────────────────────────────
 
 
-class MCPServerStatus(str, Enum):
+class MCPServerStatus(StrEnum):
     """MCP server connection status."""
+
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
     CONNECTED = "connected"
@@ -88,6 +146,7 @@ class MCPServerConfig:
             "description": "File system access"
         }
     """
+
     name: str
     command: str
     args: list[str] = field(default_factory=list)
@@ -123,17 +182,19 @@ class MCPServerTool:
 
     Each MCP server tool gets a qualified name: mcp__<server>__<tool>
     """
-    server_name: str       # Original server name (e.g., "filesystem")
-    name: str              # Original tool name (e.g., "read_file")
-    qualified_name: str    # mcp__filesystem__read_file
+
+    server_name: str  # Original server name (e.g., "filesystem")
+    name: str  # Original tool name (e.g., "read_file")
+    qualified_name: str  # mcp__filesystem__read_file
     description: str
-    input_schema: dict     # JSON Schema dict
+    input_schema: dict  # JSON Schema dict
     is_read_only: bool = False
 
 
 @dataclass
 class MCPResource:
     """Resource from an MCP server."""
+
     server_name: str
     uri: str
     name: str = ""
@@ -147,6 +208,7 @@ class MCPServerConnection:
 
     Tracks status, discovered tools/resources, and the underlying SDK objects.
     """
+
     config: MCPServerConfig
     status: MCPServerStatus = MCPServerStatus.DISCONNECTED
     tools: list[MCPServerTool] = field(default_factory=list)
@@ -190,7 +252,7 @@ def _parse_mcp_tool_name(qualified_name: str) -> tuple[str, str]:
         raise ValueError(f"Not an MCP tool name: {qualified_name}")
 
     # Remove prefix, split on separator
-    rest = qualified_name[len(MCP_TOOL_PREFIX):]
+    rest = qualified_name[len(MCP_TOOL_PREFIX) :]
     parts = rest.split(MCP_NAME_SEPARATOR, 1)
     if len(parts) != 2:
         raise ValueError(f"Invalid MCP tool name format: {qualified_name}")
@@ -393,11 +455,20 @@ class MCPManager:
             await self.disconnect_server(name)
 
     async def _cleanup_connection(self, conn: MCPServerConnection) -> None:
-        """Clean up SDK session and stdio transport."""
+        """Clean up SDK session and stdio transport.
+
+        After cleanup, clears any lingering task cancellation caused by anyio
+        cancel scopes.  When an MCP session's task group is cancelled via
+        cancel_scope.cancel(), anyio calls task.cancel() on the host task and
+        increments _pending_uncancellations.  If the __aexit__ chain raises a
+        non-CancelledError exception, cancel_scope.__exit__() does NOT call
+        task.uncancel(), leaving the task permanently cancelled.  We fix this
+        by calling uncancel() after each SDK cleanup.
+        """
         try:
             if conn._cm_stack is not None:
                 await conn._cm_stack.__aexit__(None, None, None)
-        except Exception as e:
+        except BaseException as e:
             logger.debug(f"Error closing session: {e}")
         finally:
             conn._session = None
@@ -406,10 +477,13 @@ class MCPManager:
         try:
             if conn._stdio_cm is not None:
                 await conn._stdio_cm.__aexit__(None, None, None)
-        except Exception as e:
+        except BaseException as e:
             logger.debug(f"Error closing stdio transport: {e}")
         finally:
             conn._stdio_cm = None
+
+        # Force-clean any stale anyio cancel scopes that weren't properly exited
+        _force_cleanup_stale_scopes()
 
     # ─────────────────────────────────────────────────
     # TOOL DISCOVERY
@@ -432,12 +506,12 @@ class MCPManager:
                 # Build qualified name
                 qualified_name = _build_mcp_tool_name(name, mcp_tool.name)
 
-                # Check annotations for read-only hint
-                is_read_only = False
+                # Determine read-only status from MCP annotations.
+                # Default to True (safe) when no annotations — only explicitly
+                # destructive tools should be gated.
+                is_read_only = True
                 if mcp_tool.annotations is not None:
-                    # mcp.types.Annotations has audience field
-                    # readOnlyHint is in the MCP spec but SDK exposes via annotations
-                    is_read_only = getattr(mcp_tool.annotations, "audience", None) is None
+                    is_read_only = getattr(mcp_tool.annotations, "readOnlyHint", True)
 
                 tool = MCPServerTool(
                     server_name=name,
@@ -447,7 +521,8 @@ class MCPManager:
                     input_schema=(
                         mcp_tool.inputSchema.model_dump()
                         if hasattr(mcp_tool.inputSchema, "model_dump")
-                        else dict(mcp_tool.inputSchema) if mcp_tool.inputSchema
+                        else dict(mcp_tool.inputSchema)
+                        if mcp_tool.inputSchema
                         else {}
                     ),
                     is_read_only=is_read_only,
@@ -474,7 +549,7 @@ class MCPManager:
             result = await session.list_resources()
             resources: list[MCPResource] = []
 
-            for resource in (result.resources or []):
+            for resource in result.resources or []:
                 res = MCPResource(
                     server_name=name,
                     uri=resource.uri,
@@ -617,14 +692,16 @@ class MCPManager:
         """List all registered servers with their status."""
         result = []
         for name, conn in self._servers.items():
-            result.append({
-                "name": name,
-                "status": conn.status.value,
-                "tool_count": len(conn.tools),
-                "resource_count": len(conn.resources),
-                "command": conn.config.command,
-                "error": conn.error,
-            })
+            result.append(
+                {
+                    "name": name,
+                    "status": conn.status.value,
+                    "tool_count": len(conn.tools),
+                    "resource_count": len(conn.resources),
+                    "command": conn.config.command,
+                    "error": conn.error,
+                }
+            )
         return result
 
     # ─────────────────────────────────────────────────
@@ -650,10 +727,13 @@ class MCPManager:
 
                 # Create the async function that routes to the MCP server
                 async def _call_mcp_tool(
-                    arguments: dict,
                     _qualified_name: str = mcp_tool.qualified_name,
+                    _has_no_params: bool = not mcp_tool.input_schema.get("properties"),
+                    **kwargs,
                 ) -> str:
-                    return await self.call_tool(_qualified_name, arguments)
+                    if _has_no_params:
+                        kwargs = {}
+                    return await self.call_tool(_qualified_name, kwargs)
 
                 tool = StructuredTool.from_function(
                     func=lambda _: "",
@@ -675,9 +755,7 @@ class MCPManager:
 
                 tools.append(tool)
             except Exception as e:
-                logger.warning(
-                    f"Failed to build LangChain tool for {mcp_tool.qualified_name}: {e}"
-                )
+                logger.warning(f"Failed to build LangChain tool for {mcp_tool.qualified_name}: {e}")
                 continue
 
         return tools
@@ -763,7 +841,11 @@ async def read_mcp_resource_func(server_name: str, uri: str) -> str:
 list_mcp_servers_tool = StructuredTool.from_function(
     func=list_mcp_servers_func,
     name="list_mcp_servers",
-    description="List all registered MCP servers with their connection status, tool count, and resource count. Use this to discover available MCP tools and server health.",
+    description=(
+        "List all registered MCP servers with their connection status, "
+        "tool count, and resource count. "
+        "Use this to discover available MCP tools and server health."
+    ),
 )
 
 list_mcp_servers_meta = DaziTool(
@@ -775,7 +857,9 @@ list_mcp_servers_meta = DaziTool(
 list_mcp_resources_tool = StructuredTool.from_function(
     func=list_mcp_resources_func,
     name="list_mcp_resources",
-    description="List available resources from connected MCP servers. Optionally filter by server name.",
+    description=(
+        "List available resources from connected MCP servers. Optionally filter by server name."
+    ),
 )
 
 list_mcp_resources_meta = DaziTool(
@@ -788,7 +872,9 @@ read_mcp_resource_tool = StructuredTool.from_function(
     func=lambda **kwargs: "",
     coroutine=read_mcp_resource_func,
     name="read_mcp_resource",
-    description="Read a specific MCP resource by server name and URI. Returns the resource content as text.",
+    description=(
+        "Read a specific MCP resource by server name and URI. Returns the resource content as text."
+    ),
 )
 
 read_mcp_resource_meta = DaziTool(

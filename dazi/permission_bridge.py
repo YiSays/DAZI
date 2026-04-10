@@ -25,6 +25,9 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
+
 from dazi.base import DaziTool, ToolSafety
 from dazi.mailbox import Mailbox, Message
 from dazi.permissions import PermissionBehavior, check_permission
@@ -33,7 +36,6 @@ from dazi.protocols import (
     create_permission_response,
 )
 from dazi.team import TEAM_LEAD_NAME
-
 
 # ─────────────────────────────────────────────────────────
 # RESULT
@@ -232,9 +234,6 @@ class PermissionBridge:
 # PERMISSION REQUEST TOOL
 # ─────────────────────────────────────────────────────────
 
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
-
 
 class RequestPermissionInput(BaseModel):
     tool_name: str = Field(description="Name of the tool requesting permission")
@@ -243,7 +242,7 @@ class RequestPermissionInput(BaseModel):
 
 async def request_permission_func(tool_name: str, tool_args: dict | None = None) -> str:
     """Request permission from the team leader for a tool call."""
-    from dazi._singletons import permission_bridge, active_team_name, current_agent_name
+    from dazi._singletons import active_team_name, current_agent_name, permission_bridge
     from dazi.team import TEAM_LEAD_NAME
 
     if not active_team_name:
@@ -288,7 +287,14 @@ request_permission_tool = StructuredTool.from_function(
     func=lambda **kwargs: "",
     coroutine=request_permission_func,
     name="request_permission",
-    description="Request permission from the team leader to use a tool. Only available for teammates (not the team leader).",
+    description=(
+        "Request permission from the team leader to use a tool. "
+        "Only available for teammates (not the team leader)."
+    ),
     args_schema=RequestPermissionInput,
 )
-request_permission_meta = DaziTool(name="request_permission", description="Request tool permission from team leader.", safety=ToolSafety.WRITE)
+request_permission_meta = DaziTool(
+    name="request_permission",
+    description="Request tool permission from team leader.",
+    safety=ToolSafety.WRITE,
+)

@@ -3,49 +3,45 @@
 from __future__ import annotations
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.errors import GraphInterrupt
 from rich.console import Console
 
+import dazi.repl_teams as _teams
 from dazi import __version__
-from dazi.dazimd import DaziMdFile
-from dazi.graph import (
-    EXECUTE_MODE,
-    PLAN_MODE,
-    connect_mcp_servers,
-    hook_registry,
-    permission_rules,
-    run_graph_turn,
-)
-from dazi.llm import _get_model_name, _update_proactive_prompt
-from dazi.proactive import format_tick, ProactiveSource
-from dazi.lifecycle import load_dazimd, cleanup_on_exit
-from dazi.repl_display import get_mode_badge, print_ascii_banner, print_welcome_message
-from dazi.repl_commands import handle_command
-from dazi.tokenizer import (
-    count_messages_tokens,
-    get_context_window,
-    get_token_warning_state,
-)
 from dazi._singletons import (
     BACKGROUND_DIR,
     MEMORY_DIR,
     TASKS_DIR,
+    autonomous_teammate,
     background_manager,
     cost_tracker,
-    memory_store,
     mcp_manager,
+    memory_store,
     proactive_manager,
-    autonomous_teammate,
     settings_manager,
     skill_registry,
     task_store,
     team_manager,
     worktree_manager,
 )
-import dazi.graph as _graph_mod
-import dazi.repl_teams as _teams
 from dazi.config import DATA_DIR
-from langgraph.errors import GraphInterrupt
-
+from dazi.dazimd import DaziMdFile
+from dazi.graph import (
+    EXECUTE_MODE,
+    connect_mcp_servers,
+    permission_rules,
+    run_graph_turn,
+)
+from dazi.lifecycle import cleanup_on_exit, load_dazimd
+from dazi.llm import _get_model_name, _update_proactive_prompt
+from dazi.proactive import ProactiveSource, format_tick
+from dazi.repl_commands import handle_command
+from dazi.repl_display import get_mode_badge, print_ascii_banner, print_welcome_message
+from dazi.tokenizer import (
+    count_messages_tokens,
+    get_context_window,
+    get_token_warning_state,
+)
 
 console = Console()
 dazimd_files: list[DaziMdFile] = []
@@ -58,14 +54,24 @@ dazimd_files: list[DaziMdFile] = []
 
 async def run_repl() -> None:
     import asyncio
+
     from prompt_toolkit import PromptSession
     from prompt_toolkit.formatted_text import FormattedText
+
     from dazi.repl_completer import get_prompt_session_kwargs
     from dazi.theme import PROMPT as _P
 
     # Load DAZI.md at startup
     global dazimd_files
     dazimd_files = load_dazimd(console=console)
+
+    # Onboarding: check if required settings are present
+    s = settings_manager.settings
+    if not s.api_key or not s.api_base_url or not s.model:
+        from dazi.onboard import run_onboarding
+
+        run_onboarding(console)
+        settings_manager.reload()
 
     # Ensure directories exist
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -90,7 +96,9 @@ async def run_repl() -> None:
         console.print("[dim]Proactive mode activated via DAZI_PROACTIVE env var.[/dim]")
 
     def print_welcome():
-        print_welcome_message(console, skill_count=skill_count, team_count=team_count, dazimd_files=dazimd_files)
+        print_welcome_message(
+            console, skill_count=skill_count, team_count=team_count, dazimd_files=dazimd_files
+        )
 
     print_ascii_banner(console, version=__version__)
     print_welcome()
@@ -118,7 +126,9 @@ async def run_repl() -> None:
                 context_window = get_context_window(model)
                 token_pct = (token_count / context_window * 100) if context_window > 0 else 0
 
-                warning_state = get_token_warning_state(display_msgs, model) if display_msgs else "ok"
+                warning_state = (
+                    get_token_warning_state(display_msgs, model) if display_msgs else "ok"
+                )
                 token_style = {
                     "ok": _P["token_ok"],
                     "warning": _P["token_warning"],
@@ -138,11 +148,23 @@ async def run_repl() -> None:
                     segments += [(_P["separator"], " \u00b7 "), (_P["mode_plan"], f"PRO:{badge}")]
                 autonomous_handles = autonomous_teammate.list_handles()
                 if autonomous_handles:
-                    active_count = len([h for h in autonomous_handles if h.status.value in ("active", "idle", "spawning")])
-                    segments += [(_P["separator"], " \u00b7 "), (_P["primary"], f"AUTO:{active_count}")]
+                    active_count = len(
+                        [
+                            h
+                            for h in autonomous_handles
+                            if h.status.value in ("active", "idle", "spawning")
+                        ]
+                    )
+                    segments += [
+                        (_P["separator"], " \u00b7 "),
+                        (_P["primary"], f"AUTO:{active_count}"),
+                    ]
                 active_worktrees = worktree_manager.list_all()
                 if active_worktrees:
-                    segments += [(_P["separator"], " \u00b7 "), (_P["primary"], f"WT:{len(active_worktrees)}")]
+                    segments += [
+                        (_P["separator"], " \u00b7 "),
+                        (_P["primary"], f"WT:{len(active_worktrees)}"),
+                    ]
 
                 # Optional info items
                 optional_items: list[str] = []
@@ -167,12 +189,20 @@ async def run_repl() -> None:
                 # Prompt line
                 segments += [
                     ("", "\n"),
-                    (_P["primary"], "\u276f "),
+                    ("fg:#ff8c00", "\u276f "),
                 ]
 
                 user_input = await session.prompt_async(FormattedText(segments))
                 if not user_input.strip():
                     continue
+
+                # ── Clear prompt_toolkit output and re-render as chat bubble ──
+                from dazi.repl_display import render_user_panel
+                from dazi.terminal import clear_lines, count_prompt_lines
+
+                n_lines = count_prompt_lines(segments, user_input, console.width)
+                clear_lines(n_lines)
+                render_user_panel(user_input, console)
 
                 cmd = user_input.strip()
 
@@ -233,13 +263,25 @@ async def run_repl() -> None:
                     )
 
             except GraphInterrupt:
-                console.print("\n[yellow]Interrupt escaped graph — this should not happen.[/yellow]")
+                console.print(
+                    "\n[yellow]Interrupt escaped graph — this should not happen.[/yellow]"
+                )
             except KeyboardInterrupt:
                 if proactive_manager.is_proactive_active():
                     proactive_manager.pause()
-                    console.print("\n[dim]Proactive mode paused. Submit input to resume. Use /quit to exit.[/dim]")
+                    console.print(
+                        "\n[dim]Proactive mode paused. "
+                        "Submit input to resume. Use /quit to exit.[/dim]"
+                    )
                 else:
                     console.print("\n[dim]Use /quit to exit.[/dim]")
+            except asyncio.CancelledError:
+                import traceback as _tb
+
+                console.print("\n[red]CancelledError — traceback:[/red]")
+                _tb.print_exc()
+                console.print("[dim]Shutting down...[/dim]")
+                break
             except Exception as e:
                 console.print(f"\n[red]Error: {e}[/red]")
 

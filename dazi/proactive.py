@@ -19,22 +19,28 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
-from typing import Callable
+from enum import StrEnum
+
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
 from dazi.base import DaziTool, ToolSafety
 
 
-class ProactiveSource(str, Enum):
+class ProactiveSource(StrEnum):
     """How proactive mode was activated."""
-    COMMAND = "command"    # /proactive on
-    ENV = "env"            # DAZI_PROACTIVE=1
+
+    COMMAND = "command"  # /proactive on
+    ENV = "env"  # DAZI_PROACTIVE=1
 
 
-class ProactiveState(str, Enum):
+class ProactiveState(StrEnum):
     """Current proactive state."""
+
     INACTIVE = "inactive"
     ACTIVE = "active"
     PAUSED = "paused"
@@ -43,6 +49,7 @@ class ProactiveState(str, Enum):
 @dataclass
 class ProactiveManager:
     """Track proactive mode state: active/inactive/paused."""
+
     _active: bool = False
     _paused: bool = False
     _activation_count: int = 0
@@ -141,15 +148,11 @@ class ProactiveManager:
     def last_tick_time(self) -> str | None:
         return self._last_tick_time
 
-    def subscribe(
-        self, callback: Callable[[ProactiveState, ProactiveState], None]
-    ) -> None:
+    def subscribe(self, callback: Callable[[ProactiveState, ProactiveState], None]) -> None:
         """Subscribe to state changes. Callback receives (old_state, new_state)."""
         self._subscribers.append(callback)
 
-    def _notify(
-        self, old_state: ProactiveState, new_state: ProactiveState
-    ) -> None:
+    def _notify(self, old_state: ProactiveState, new_state: ProactiveState) -> None:
         for cb in self._subscribers:
             try:
                 cb(old_state, new_state)
@@ -180,10 +183,6 @@ def format_tick() -> str:
 # SLEEP TOOL
 # ─────────────────────────────────────────────────────────
 
-import asyncio
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
-
 
 class SleepInput(BaseModel):
     seconds: float = Field(description="Number of seconds to sleep (0.1 to 300)", ge=0.1, le=300)
@@ -199,7 +198,12 @@ sleep_tool = StructuredTool.from_function(
     func=lambda **kwargs: "",
     coroutine=sleep_func,
     name="sleep",
-    description="Non-blocking sleep for pacing between actions. Use instead of shell_exec('sleep N'). Range: 0.1 to 300 seconds.",
+    description=(
+        "Non-blocking sleep for pacing between actions. "
+        "Use instead of shell_exec('sleep N'). Range: 0.1 to 300 seconds."
+    ),
     args_schema=SleepInput,
 )
-sleep_meta = DaziTool(name="sleep", description="Non-blocking sleep for pacing.", safety=ToolSafety.SAFE)
+sleep_meta = DaziTool(
+    name="sleep", description="Non-blocking sleep for pacing.", safety=ToolSafety.SAFE
+)

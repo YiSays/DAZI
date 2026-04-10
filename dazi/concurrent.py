@@ -9,9 +9,6 @@ from typing import Any
 
 from langchain_core.messages import ToolMessage
 
-from dazi.base import ToolSafety
-
-
 # ─────────────────────────────────────────────────────────
 # CONSTANTS
 # ─────────────────────────────────────────────────────────
@@ -23,9 +20,11 @@ MAX_CONCURRENT = int(os.getenv("DAZI_MAX_CONCURRENT", "5"))
 # TOOL CALL BATCH
 # ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class ToolCallBatch:
     """A batch of tool calls categorized by concurrency safety."""
+
     parallel: list[dict] = field(default_factory=list)
     serial: list[dict] = field(default_factory=list)
 
@@ -76,6 +75,7 @@ def partition_tool_calls(
 # CONCURRENT EXECUTION
 # ─────────────────────────────────────────────────────────
 
+
 async def execute_tool(
     tool_call: dict,
     tools: list[Any],
@@ -93,7 +93,7 @@ async def execute_tool(
         )
 
     try:
-        result = tool.invoke(tool_args)
+        result = await tool.ainvoke(tool_args)
         return ToolMessage(content=str(result), tool_call_id=tool_id)
     except Exception as e:
         return ToolMessage(

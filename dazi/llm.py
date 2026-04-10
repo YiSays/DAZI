@@ -11,15 +11,14 @@ from __future__ import annotations
 
 from langchain_openai import ChatOpenAI
 
-from dazi.config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL
 from dazi._singletons import (
     memory_store,
-    skill_registry,
-    settings_manager,
     proactive_manager,
+    settings_manager,
+    skill_registry,
 )
+from dazi.config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL
 from dazi.prompt_builder import STATIC_SECTIONS, PromptSection, SystemPromptBuilder
-
 
 # ─────────────────────────────────────────────────────────
 # LLM CLIENT FACTORY
@@ -113,7 +112,8 @@ report connection issues to the user. Use /mcp to manage server connections."""
 SKILLS_GUIDANCE = """\
 ## Skills
 You have access to skills that provide specialized instructions for common tasks.
-Use the `skill` tool to invoke a skill by name. Users can also invoke skills via /<skill-name> in the REPL."""
+Use the `skill` tool to invoke a skill by name.
+Users can also invoke skills via /<skill-name> in the REPL."""
 
 TEAM_MANAGEMENT_SECTION = """\
 ## Team Management
@@ -123,7 +123,8 @@ You can create and manage agent teams for collaborative work:
 3. Use show_team to see team details including member status
 4. Use delete_team to remove a team (all members must be completed first)
 Teams share a task board. When a team is active, task operations go to that team's board.
-Users can also manage teams via REPL: /teams, /team create <name>, /team <name>, /team delete <name>."""
+Users can also manage teams via REPL: /teams, /team create <name>,
+/team <name>, /team delete <name>."""
 
 PROTOCOLS_SECTION = """\
 ## Team Protocols and Messaging

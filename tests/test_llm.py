@@ -1,9 +1,10 @@
-"""Tests for dazi/llm.py — create_llm, _get_llm, _get_model_name, get_memory_content, get_skills_content."""
+"""Tests for dazi/llm.py — create_llm, _get_llm, _get_model_name, get_memory_content,
+get_skills_content."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 

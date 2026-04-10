@@ -1,14 +1,13 @@
 """Tests for dazi/hooks.py — hook events, results, and registry."""
+
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 
 from dazi.hooks import HookEvent, HookRegistry, HookResult
 from dazi.permissions import PermissionBehavior
-
 
 # ─────────────────────────────────────────────────────────
 # HookEvent enum values

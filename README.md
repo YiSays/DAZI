@@ -30,6 +30,15 @@ uv run python -m dazi
 
 ![DAZI DEMO](docs/demo.gif)
 
+## What's New in v0.3.0
+
+- **Onboarding wizard** — First-run setup for API key, model, and base URL. Re-run anytime with `/onboard`.
+- **MCP disconnect resilience** — Force-cleanup of stale anyio cancel scopes after MCP disconnect, preventing `CancelledError` crashes on `/reload`.
+- **Streaming display** — Rich `Live` + `Spinner` for LLM response streaming, replacing static Markdown panels.
+- **Terminal utilities** — New `terminal.py` module for display-width calculation and prompt line counting with wide Unicode support.
+- **Code quality** — `StrEnum` migration, `ruff` formatting pass across all modules, import reordering, and dead code removal.
+- **Test coverage** — New `test_mcp_lifecycle.py` for MCP connection lifecycle; expanded tests across 70 files.
+
 ## Architecture
 
 DAZI is built on a LangGraph state machine with this core loop:

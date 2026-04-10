@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import re
 
-import pytest
-
 from dazi.proactive import (
     ProactiveManager,
     ProactiveSource,
     ProactiveState,
     format_tick,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # ENUM TESTS
@@ -199,5 +196,5 @@ class TestFormatTick:
         assert result.startswith("<tick>")
         assert result.endswith("</tick>")
         # Extract the time portion
-        time_part = result[len("<tick>"):-len("</tick>")]
+        time_part = result[len("<tick>") : -len("</tick>")]
         assert re.match(r"\d{2}:\d{2}:\d{2}", time_part)

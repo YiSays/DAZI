@@ -12,18 +12,19 @@ KEY CONCEPTS:
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Coroutine
-
+from enum import StrEnum
+from typing import Any
 
 # ─────────────────────────────────────────────────────────
 # TEAMMATE STATUS
 # ─────────────────────────────────────────────────────────
 
 
-class TeammateStatus(str, Enum):
+class TeammateStatus(StrEnum):
     """Teammate lifecycle states."""
+
     SPAWNING = "spawning"
     ACTIVE = "active"
     IDLE = "idle"
@@ -40,11 +41,12 @@ class TeammateStatus(str, Enum):
 @dataclass
 class TeammateHandle:
     """Tracks a spawned teammate's runtime state."""
-    name: str                          # "frontend", "backend"
-    agent_id: str                      # "frontend@web-dev"
-    team_name: str                     # "web-dev"
+
+    name: str  # "frontend", "backend"
+    agent_id: str  # "frontend@web-dev"
+    team_name: str  # "web-dev"
     status: TeammateStatus = TeammateStatus.SPAWNING
-    task: asyncio.Task[Any] | None = None          # The asyncio.Task
+    task: asyncio.Task[Any] | None = None  # The asyncio.Task
     abort_signal: asyncio.Event = field(default_factory=asyncio.Event)
 
 
@@ -164,7 +166,7 @@ class TeammateRunner:
 
         try:
             await asyncio.wait_for(handle.task, timeout=5.0)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
+        except (TimeoutError, asyncio.CancelledError):
             pass
 
         handle.status = TeammateStatus.COMPLETED
@@ -178,9 +180,7 @@ class TeammateRunner:
             Count of teammates shut down.
         """
         to_shutdown = [
-            (h.team_name, h.name)
-            for h in self._teammates.values()
-            if h.team_name == team_name
+            (h.team_name, h.name) for h in self._teammates.values() if h.team_name == team_name
         ]
 
         count = 0

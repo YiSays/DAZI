@@ -1,22 +1,20 @@
 """Tests for dazi/compact.py — message grouping, micro/full compact."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from dazi.compact import (
     CLEARED_TOOL_RESULT,
     COMPACT_BOUNDARY,
-    CompactResult,
     _format_for_summarization,
     auto_compact,
     full_compact,
     group_messages_by_round,
     micro_compact,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # group_messages_by_round

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
@@ -15,18 +15,18 @@ def patch_singletons(monkeypatch, tmp_path: Path) -> None:
     Must be called BEFORE importing modules that use from dazi._singletons import X.
     """
     from dazi.background import BackgroundTaskManager
+    from dazi.coordinator import AutonomousTeammate
     from dazi.cost_tracker import CostTracker
     from dazi.mailbox import Mailbox
-    from dazi.memory import MemoryStore
     from dazi.mcp_client import MCPManager
+    from dazi.memory import MemoryStore
+    from dazi.permission_bridge import PermissionBridge
+    from dazi.proactive import ProactiveManager
     from dazi.skills import SkillRegistry
     from dazi.task_store import TaskStore
     from dazi.team import TeamManager
     from dazi.teammate import TeammateRunner
-    from dazi.proactive import ProactiveManager
-    from dazi.coordinator import AutonomousTeammate
     from dazi.worktree import WorktreeManager
-    from dazi.permission_bridge import PermissionBridge
 
     data_dir = tmp_path / ".dazi"
     data_dir.mkdir(exist_ok=True)

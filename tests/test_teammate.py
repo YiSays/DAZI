@@ -8,7 +8,6 @@ import pytest
 
 from dazi.teammate import TeammateHandle, TeammateRunner, TeammateStatus
 
-
 # ─────────────────────────────────────────────────────────
 # TeammateStatus enum
 # ─────────────────────────────────────────────────────────
@@ -80,9 +79,7 @@ class TestTeammateRunnerShutdown:
         async def long_run(handle: TeammateHandle) -> None:
             await asyncio.sleep(100)
 
-        task = runner.spawn(
-            team_name="team1", member_name="sleeper", run_func=long_run
-        )
+        runner.spawn(team_name="team1", member_name="sleeper", run_func=long_run)
         # Give it a moment to start
         await asyncio.sleep(0.05)
         result = await runner.shutdown("team1", "sleeper")

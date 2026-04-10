@@ -20,36 +20,41 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from dazi.base import DaziTool, ToolSafety
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field, field_validator
 
+from dazi.base import DaziTool, ToolSafety
 
 # ─────────────────────────────────────────────────────────
 # CONSTANTS
 # ─────────────────────────────────────────────────────────
 
-MAX_ENTRYPOINT_LINES = 200       # MEMORY.md max lines
-MAX_MEMORY_INDEX_SIZE = 25_000   # MEMORY.md max bytes
+MAX_ENTRYPOINT_LINES = 200  # MEMORY.md max lines
+MAX_MEMORY_INDEX_SIZE = 25_000  # MEMORY.md max bytes
 
 
 # ─────────────────────────────────────────────────────────
 # MEMORY CATEGORIES
 # ─────────────────────────────────────────────────────────
 
-class MemoryCategory(str, Enum):
+
+class MemoryCategory(StrEnum):
     """Types of memories in Dazi's memory taxonomy."""
-    USER = "user"              # User preferences and identity
-    FEEDBACK = "feedback"      # Behavioral guidance (what to do/avoid)
-    PROJECT = "project"        # Project-specific knowledge
-    REFERENCE = "reference"    # External pointers and resources
+
+    USER = "user"  # User preferences and identity
+    FEEDBACK = "feedback"  # Behavioral guidance (what to do/avoid)
+    PROJECT = "project"  # Project-specific knowledge
+    REFERENCE = "reference"  # External pointers and resources
 
 
 # ─────────────────────────────────────────────────────────
 # MEMORY ENTRY
 # ─────────────────────────────────────────────────────────
+
 
 @dataclass
 class MemoryEntry:
@@ -66,6 +71,7 @@ class MemoryEntry:
     User prefers functional programming.
     ```
     """
+
     content: str
     category: MemoryCategory = MemoryCategory.USER
     id: str = field(default_factory=lambda: _generate_id())
@@ -155,6 +161,7 @@ def _parse_frontmatter(text: str) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────
 # MEMORY STORE
 # ─────────────────────────────────────────────────────────
+
 
 class MemoryStore:
     """Persistent memory storage with index management.
@@ -321,11 +328,13 @@ class MemoryStore:
 
         # Enforce size limits
         if len(content) > MAX_MEMORY_INDEX_SIZE:
-            content = content[:MAX_MEMORY_INDEX_SIZE - 50] + "\n\n... (index truncated)"
+            content = content[: MAX_MEMORY_INDEX_SIZE - 50] + "\n\n... (index truncated)"
 
         content_lines = content.splitlines()
         if len(content_lines) > MAX_ENTRYPOINT_LINES:
-            content = "\n".join(content_lines[:MAX_ENTRYPOINT_LINES - 2]) + "\n\n... (index truncated)"
+            content = (
+                "\n".join(content_lines[: MAX_ENTRYPOINT_LINES - 2]) + "\n\n... (index truncated)"
+            )
 
         self._index_path.write_text(content, encoding="utf-8")
         return content
@@ -340,6 +349,7 @@ class MemoryStore:
 # ─────────────────────────────────────────────────────────
 # RELEVANCE SCORING
 # ─────────────────────────────────────────────────────────
+
 
 def _tokenize(text: str) -> list[str]:
     """Split text into search terms."""
@@ -394,9 +404,6 @@ def _compute_relevance(entry: MemoryEntry, query_terms: set[str]) -> float:
 # MEMORY TOOLS
 # ─────────────────────────────────────────────────────────
 
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field, field_validator
-
 VALID_CATEGORIES = {c.value for c in MemoryCategory}
 
 
@@ -419,11 +426,15 @@ class MemoryWriteInput(BaseModel):
     @classmethod
     def validate_category(cls, v: str) -> str:
         if v not in VALID_CATEGORIES:
-            raise ValueError(f"Invalid category: '{v}'. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}")
+            raise ValueError(
+                f"Invalid category: '{v}'. Must be one of: {', '.join(sorted(VALID_CATEGORIES))}"
+            )
         return v
 
 
-def memory_write(content: str, category: str = "user", description: str = "", tags: list[str] | None = None) -> str:
+def memory_write(
+    content: str, category: str = "user", description: str = "", tags: list[str] | None = None
+) -> str:
     """Store a memory for future recall."""
     from dazi._singletons import memory_store
 
@@ -440,7 +451,11 @@ def memory_write(content: str, category: str = "user", description: str = "", ta
 memory_write_tool = StructuredTool.from_function(
     func=memory_write,
     name="memory_write",
-    description="Store a memory for future recall. Memories persist across conversations. Categories: user (preferences), feedback (guidance), project (knowledge), reference (pointers). Use tags to improve search relevance.",
+    description=(
+        "Store a memory for future recall. Memories persist across conversations. "
+        "Categories: user (preferences), feedback (guidance), project (knowledge), "
+        "reference (pointers). Use tags to improve search relevance."
+    ),
     args_schema=MemoryWriteInput,
 )
 
@@ -462,7 +477,12 @@ def memory_read(memory_id: str) -> str:
     entry = memory_store.read(memory_id)
     if entry is None:
         return f"Memory not found: {memory_id}"
-    return f"ID: {entry.id}\nCategory: {entry.category.value}\nCreated: {entry.created_at}\nTags: {entry.tags}\n\n{entry.content}"
+    return (
+        f"ID: {entry.id}\n"
+        f"Category: {entry.category.value}\n"
+        f"Created: {entry.created_at}\n"
+        f"Tags: {entry.tags}\n\n{entry.content}"
+    )
 
 
 memory_read_tool = StructuredTool.from_function(

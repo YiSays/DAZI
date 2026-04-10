@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from dazi.background import BackgroundTaskManager
 from dazi.cost_tracker import CostTracker
@@ -21,7 +20,6 @@ from dazi.skills import SkillRegistry
 from dazi.task_store import Task, TaskStatus, TaskStore
 from dazi.team import TeamManager
 from dazi.teammate import TeammateRunner
-
 
 # ─────────────────────────────────────────────────────────
 # DIRECTORY FIXTURES
@@ -121,7 +119,7 @@ def sample_task() -> Task:
         subject="Test task",
         description="A test task description",
         status=TaskStatus.PENDING,
-        created_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
     )
 
 

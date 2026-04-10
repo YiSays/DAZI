@@ -19,18 +19,17 @@ import fnmatch
 import re
 import shlex
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
-
 
 # ─────────────────────────────────────────────────────────
 # PERMISSION MODES
 # ─────────────────────────────────────────────────────────
 
 
-class PermissionMode(str, Enum):
+class PermissionMode(StrEnum):
     """How the agent handles tool permissions.
 
     4 core modes that cover the key behaviors.
@@ -47,7 +46,7 @@ class PermissionMode(str, Enum):
 # ─────────────────────────────────────────────────────────
 
 
-class PermissionBehavior(str, Enum):
+class PermissionBehavior(StrEnum):
     """What happens when a permission rule matches."""
 
     ALLOW = "allow"
@@ -168,13 +167,27 @@ def _shell_command_matches(command: str, pattern: str) -> bool:
 
 
 # Regex to split on pipeline/chain operators, but NOT redirect operators.
-_PIPELINE_RE = re.compile(r'\s*(?:\|\||&&|\||;)\s*')
+_PIPELINE_RE = re.compile(r"\s*(?:\|\||&&|\||;)\s*")
 
 # Commands whose first arg is a subcommand (not a path/URL target).
-_SUBCOMMAND_COMMANDS = frozenset({
-    "git", "docker", "kubectl", "npm", "yarn", "pnpm",
-    "pip", "uv", "cargo", "go", "gh", "apt", "yum", "brew",
-})
+_SUBCOMMAND_COMMANDS = frozenset(
+    {
+        "git",
+        "docker",
+        "kubectl",
+        "npm",
+        "yarn",
+        "pnpm",
+        "pip",
+        "uv",
+        "cargo",
+        "go",
+        "gh",
+        "apt",
+        "yum",
+        "brew",
+    }
+)
 
 
 def _split_pipeline(command: str) -> list[str]:
@@ -213,11 +226,7 @@ def _single_command_matches(command: str, pattern: str) -> bool:
         if raw.endswith("/"):
             return joined.startswith(raw) or joined == base
         # Otherwise require a separator after the base
-        return (
-            joined.startswith(base + " ")
-            or joined.startswith(base + "/")
-            or joined == base
-        )
+        return joined.startswith(base + " ") or joined.startswith(base + "/") or joined == base
 
     # Prefix pattern: "npm:" matches "npm install"
     if pattern.endswith(":"):
@@ -329,9 +338,7 @@ def check_permission(
                     PermissionBehavior.ASK: 2,
                     PermissionBehavior.ALLOW: 1,
                 }
-                if behavior_rank.get(rule.behavior, 0) > behavior_rank.get(
-                    best_match.behavior, 0
-                ):
+                if behavior_rank.get(rule.behavior, 0) > behavior_rank.get(best_match.behavior, 0):
                     best_match = rule
 
     # 4. Apply matched rule
@@ -340,19 +347,26 @@ def check_permission(
             return PermissionResult(
                 behavior=PermissionBehavior.DENY,
                 matched_rule=best_match,
-                reason=f"Denied by rule: {best_match.tool_name or '*'} (source: {best_match.source})",
+                reason=(
+                    f"Denied by rule: {best_match.tool_name or '*'} (source: {best_match.source})"
+                ),
             )
         elif best_match.behavior == PermissionBehavior.ALLOW:
             return PermissionResult(
                 behavior=PermissionBehavior.ALLOW,
                 matched_rule=best_match,
-                reason=f"Allowed by rule: {best_match.tool_name or '*'} (source: {best_match.source})",
+                reason=(
+                    f"Allowed by rule: {best_match.tool_name or '*'} (source: {best_match.source})"
+                ),
             )
         else:
             return PermissionResult(
                 behavior=PermissionBehavior.ASK,
                 matched_rule=best_match,
-                reason=f"Requires approval: {best_match.tool_name or '*'} (source: {best_match.source})",
+                reason=(
+                    f"Requires approval: {best_match.tool_name or '*'} "
+                    f"(source: {best_match.source})"
+                ),
             )
 
     # 5. No rule matched — use mode defaults
@@ -393,9 +407,7 @@ def parse_rule(rule_str: str, source: str = "cli") -> PermissionRule:
     try:
         behavior = PermissionBehavior(behavior_str)
     except ValueError:
-        raise ValueError(
-            f"Invalid behavior: '{behavior_str}'. Expected: allow, deny, ask"
-        )
+        raise ValueError(f"Invalid behavior: '{behavior_str}'. Expected: allow, deny, ask")
 
     return PermissionRule(
         behavior=behavior,
@@ -537,9 +549,7 @@ async def prompt_permission_decisions(
     for ask in ask_tools:
         pattern = derive_permission_pattern(ask["tool_name"], ask["tool_args"])
         pattern_display = (
-            f"\n[dim]Rule to add: allow {ask['tool_name']} {pattern}[/dim]"
-            if pattern
-            else ""
+            f"\n[dim]Rule to add: allow {ask['tool_name']} {pattern}[/dim]" if pattern else ""
         )
         console.print(
             Panel(

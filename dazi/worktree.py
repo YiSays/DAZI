@@ -10,16 +10,17 @@ KEY CONCEPTS:
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
-from dazi.base import DaziTool, ToolSafety
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
+from dazi.base import DaziTool, ToolSafety
 
 # ─────────────────────────────────────────────────────────
 # WORKTREE DATACLASS
@@ -34,13 +35,13 @@ class Worktree:
     Edits in one worktree don't affect another.
     """
 
-    id: str                  # Sanitized agent name (slug)
-    path: Path               # Absolute path to worktree directory
-    branch: str              # Branch name (e.g., "agent-frontend")
-    agent_name: str          # Original agent name (before sanitization)
-    created_at: str          # ISO timestamp
-    original_cwd: str        # CWD before entering worktree
-    original_branch: str     # Branch before creating worktree
+    id: str  # Sanitized agent name (slug)
+    path: Path  # Absolute path to worktree directory
+    branch: str  # Branch name (e.g., "agent-frontend")
+    agent_name: str  # Original agent name (before sanitization)
+    created_at: str  # ISO timestamp
+    original_cwd: str  # CWD before entering worktree
+    original_branch: str  # Branch before creating worktree
 
 
 # ─────────────────────────────────────────────────────────
@@ -102,8 +103,7 @@ class WorktreeManager:
 
         if len(slug) > self._config.max_slug_length:
             raise ValueError(
-                f"Worktree slug too long: {len(slug)} chars "
-                f"(max {self._config.max_slug_length})"
+                f"Worktree slug too long: {len(slug)} chars (max {self._config.max_slug_length})"
             )
 
         segments = slug.split("/")
@@ -111,13 +111,9 @@ class WorktreeManager:
             if not segment:
                 raise ValueError("Worktree slug cannot contain empty segments.")
             if segment == ".":
-                raise ValueError(
-                    'Worktree slug cannot contain "." segments (path traversal).'
-                )
+                raise ValueError('Worktree slug cannot contain "." segments (path traversal).')
             if segment == "..":
-                raise ValueError(
-                    'Worktree slug cannot contain ".." segments (path traversal).'
-                )
+                raise ValueError('Worktree slug cannot contain ".." segments (path traversal).')
             if not self.VALID_SLUG_SEGMENT.match(segment):
                 raise ValueError(
                     f"Invalid worktree slug segment: '{segment}'. "
@@ -243,9 +239,12 @@ class WorktreeManager:
 
         # Build git worktree add command
         cmd = [
-            "git", "worktree", "add",
+            "git",
+            "worktree",
+            "add",
             str(worktree_path),
-            "-b", branch_name,
+            "-b",
+            branch_name,
         ]
         if base_branch:
             cmd.append(base_branch)
@@ -259,16 +258,14 @@ class WorktreeManager:
         )
 
         if result.returncode != 0:
-            raise RuntimeError(
-                f"Failed to create worktree: {result.stderr.strip()}"
-            )
+            raise RuntimeError(f"Failed to create worktree: {result.stderr.strip()}")
 
         worktree = Worktree(
             id=slug,
             path=worktree_path,
             branch=branch_name,
             agent_name=agent_name,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             original_cwd=original_cwd,
             original_branch=current_branch,
         )
@@ -322,6 +319,7 @@ class WorktreeManager:
             # Fallback: rm -rf
             if wt.path.exists():
                 import shutil
+
                 shutil.rmtree(wt.path, ignore_errors=True)
 
         # Delete the branch
@@ -432,7 +430,7 @@ class WorktreeManager:
             # Parse created_at timestamp
             try:
                 created = datetime.fromisoformat(wt.created_at)
-                age_seconds = (now - created.timestamp())
+                age_seconds = now - created.timestamp()
             except (ValueError, OSError):
                 continue
 
@@ -460,13 +458,14 @@ class WorktreeManager:
 # WORKTREE TOOLS
 # ─────────────────────────────────────────────────────────
 
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
-
 
 class CreateWorktreeInput(BaseModel):
-    agent_name: str = Field(description="Name for the agent/worktree. Alphanumeric, dots, underscores, and dashes only.")
-    base_branch: str | None = Field(default=None, description="Optional base branch for the worktree. Defaults to current HEAD.")
+    agent_name: str = Field(
+        description="Name for the agent/worktree. Alphanumeric, dots, underscores, and dashes only."
+    )
+    base_branch: str | None = Field(
+        default=None, description="Optional base branch for the worktree. Defaults to current HEAD."
+    )
 
 
 async def create_worktree_func(agent_name: str, base_branch: str | None = None) -> str:
@@ -485,16 +484,28 @@ create_worktree_tool = StructuredTool.from_function(
     func=lambda **kwargs: "",
     coroutine=create_worktree_func,
     name="create_worktree",
-    description="Create a git worktree for isolated agent work. Each worktree is a full checkout on a separate branch.",
+    description=(
+        "Create a git worktree for isolated agent work. "
+        "Each worktree is a full checkout on a separate branch."
+    ),
     args_schema=CreateWorktreeInput,
 )
-create_worktree_meta = DaziTool(name="create_worktree", description="Create a git worktree for isolated agent work.", safety=ToolSafety.WRITE)
+create_worktree_meta = DaziTool(
+    name="create_worktree",
+    description="Create a git worktree for isolated agent work.",
+    safety=ToolSafety.WRITE,
+)
 
 
 class FinishWorktreeInput(BaseModel):
     agent_name: str = Field(description="Name of the agent whose worktree to finish.")
-    action: str = Field(description='"keep" to preserve branch for manual merge, "remove" to delete entirely.')
-    force: bool = Field(default=False, description="Required when action is 'remove' and worktree has uncommitted changes.")
+    action: str = Field(
+        description='"keep" to preserve branch for manual merge, "remove" to delete entirely.'
+    )
+    force: bool = Field(
+        default=False,
+        description="Required when action is 'remove' and worktree has uncommitted changes.",
+    )
 
 
 async def finish_worktree_func(agent_name: str, action: str = "keep", force: bool = False) -> str:
@@ -508,10 +519,16 @@ async def finish_worktree_func(agent_name: str, action: str = "keep", force: boo
 
     if action == "keep":
         branch = worktree_manager.keep(slug)
-        return f"Kept worktree. Branch '{branch}' preserved at {wt.path}.\nYou can merge changes from this branch."
+        return (
+            f"Kept worktree. Branch '{branch}' preserved at {wt.path}.\n"
+            "You can merge changes from this branch."
+        )
     elif action == "remove":
         if worktree_manager.has_uncommitted_changes(slug) and not force:
-            return "Worktree has uncommitted changes. Use force=true to discard, or action='keep' to preserve."
+            return (
+                "Worktree has uncommitted changes. "
+                "Use force=true to discard, or action='keep' to preserve."
+            )
         removed = worktree_manager.remove(slug, force=force)
         return f"Removed worktree for '{agent_name}'." if removed else "Failed to remove worktree."
     else:
@@ -525,7 +542,11 @@ finish_worktree_tool = StructuredTool.from_function(
     description="Finish a worktree: keep the branch for manual merge, or remove entirely.",
     args_schema=FinishWorktreeInput,
 )
-finish_worktree_meta = DaziTool(name="finish_worktree", description="Finish a worktree: keep or remove.", safety=ToolSafety.WRITE)
+finish_worktree_meta = DaziTool(
+    name="finish_worktree",
+    description="Finish a worktree: keep or remove.",
+    safety=ToolSafety.WRITE,
+)
 
 
 class ListWorktreesInput(BaseModel):
@@ -553,4 +574,6 @@ list_worktrees_tool = StructuredTool.from_function(
     description="List all active git worktrees with dirty status.",
     args_schema=ListWorktreesInput,
 )
-list_worktrees_meta = DaziTool(name="list_worktrees", description="List all active git worktrees.", safety=ToolSafety.SAFE)
+list_worktrees_meta = DaziTool(
+    name="list_worktrees", description="List all active git worktrees.", safety=ToolSafety.SAFE
+)

@@ -11,12 +11,11 @@ KEY CONCEPTS:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from dazi.mailbox import Message
 from dazi.team import TEAM_LEAD_NAME
-
 
 # ─────────────────────────────────────────────────────────
 # HELPER
@@ -25,7 +24,7 @@ from dazi.team import TEAM_LEAD_NAME
 
 def _now() -> str:
     """Return current UTC time as ISO 8601 string."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _new_id() -> str:
@@ -117,7 +116,8 @@ def create_shutdown_response(
         id=_new_id(),
         from_agent=from_agent,
         to_agent=to_agent,
-        text=f"Shutdown {'approved' if approve else 'rejected'}" + (f": {reason}" if reason else ""),
+        text=f"Shutdown {'approved' if approve else 'rejected'}"
+        + (f": {reason}" if reason else ""),
         timestamp=_now(),
         summary=f"Shutdown {'approved' if approve else 'rejected'} by {from_agent}",
         msg_type="shutdown_response",
@@ -154,7 +154,8 @@ def create_permission_request(
         id=_new_id(),
         from_agent=from_agent,
         to_agent=TEAM_LEAD_NAME,
-        text=f"Permission request from {from_agent}: {tool_name}" + (f" — {reason}" if reason else ""),
+        text=f"Permission request from {from_agent}: {tool_name}"
+        + (f" — {reason}" if reason else ""),
         timestamp=_now(),
         summary=f"Permission request: {tool_name}",
         msg_type="permission_request",
@@ -187,7 +188,8 @@ def create_permission_response(
         id=_new_id(),
         from_agent=from_agent,
         to_agent=to_agent,
-        text=f"Permission {'approved' if approved else 'denied'} for {to_agent}" + (f": {reason}" if reason else ""),
+        text=f"Permission {'approved' if approved else 'denied'} for {to_agent}"
+        + (f": {reason}" if reason else ""),
         timestamp=_now(),
         summary=f"Permission {'approved' if approved else 'denied'}",
         msg_type="permission_response",
@@ -252,7 +254,8 @@ def create_plan_approval_response(
         id=_new_id(),
         from_agent=from_agent,
         to_agent=to_agent,
-        text=f"Plan {'approved' if approve else 'changes requested'}" + (f": {feedback}" if feedback else ""),
+        text=f"Plan {'approved' if approve else 'changes requested'}"
+        + (f": {feedback}" if feedback else ""),
         timestamp=_now(),
         summary=f"Plan {'approved' if approve else 'changes requested'}",
         msg_type="plan_approval_response",
@@ -291,7 +294,8 @@ def create_idle_notification(
         id=_new_id(),
         from_agent=from_agent,
         to_agent="*",
-        text=f"{from_agent} is now idle" + (f" (reason: {idle_reason})" if idle_reason != "no_pending_work" else ""),
+        text=f"{from_agent} is now idle"
+        + (f" (reason: {idle_reason})" if idle_reason != "no_pending_work" else ""),
         timestamp=_now(),
         summary=summary or f"{from_agent} idle ({idle_reason})",
         msg_type="idle_notification",

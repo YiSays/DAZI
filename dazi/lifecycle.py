@@ -6,8 +6,6 @@ from pathlib import Path
 
 from rich.console import Console
 
-from dazi.dazimd import DaziMdFile, discover_dazimd_files, merge_dazimd_content
-from dazi.llm import prompt_builder
 from dazi._singletons import (
     autonomous_teammate,
     background_manager,
@@ -17,6 +15,8 @@ from dazi._singletons import (
     teammate_runner,
     worktree_manager,
 )
+from dazi.dazimd import DaziMdFile, discover_dazimd_files, merge_dazimd_content
+from dazi.llm import prompt_builder
 
 
 def load_dazimd(*, console: Console) -> list[DaziMdFile]:
@@ -69,9 +69,7 @@ async def cleanup_on_exit(
 
     active = background_manager.list_active()
     if active:
-        console.print(
-            f"[dim]Cancelling {len(active)} remaining background task(s)...[/dim]"
-        )
+        console.print(f"[dim]Cancelling {len(active)} remaining background task(s)...[/dim]")
         for task in active:
             await background_manager.cancel(task.id)
 

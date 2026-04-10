@@ -2,7 +2,6 @@
 
 import argparse
 import asyncio
-import sys
 
 from dazi import __version__
 from dazi.main import run_repl

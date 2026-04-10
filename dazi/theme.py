@@ -18,6 +18,7 @@ RICH: dict[str, str] = {
     "error": "red",
     "dim": "dim",
     "accent": "magenta",
+    "user_title": "bold orange3",
 }
 
 # prompt_toolkit FormattedText styles — ("style", "text") tuples
@@ -41,4 +42,5 @@ BORDER: dict[str, str] = {
     "dim": "dim",
     "brand": "bright_cyan",
     "primary": "blue",
+    "user": "orange3",
 }

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +32,7 @@ class ModelPricing:
 
     For dazi with OpenAI, we use simplified input/output pricing.
     """
+
     model: str
     input_cost_per_mtok: float
     output_cost_per_mtok: float
@@ -94,6 +95,7 @@ def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
 @dataclass
 class CostRecord:
     """Accumulated cost data for a single model."""
+
     model: str
     input_tokens: int = 0
     output_tokens: int = 0
@@ -207,7 +209,6 @@ class CostTracker:
         Shows total cost, total tokens, and per-model rows.
         """
         total_input, total_output = self.get_total_tokens()
-        total_cost = self.get_total_cost()
         request_count = self.get_total_request_count()
 
         lines = [
@@ -232,10 +233,7 @@ class CostTracker:
     def save(self) -> None:
         """Persist current session costs to last_session.json."""
         data = {
-            "model_usage": {
-                model: record.to_dict()
-                for model, record in self._records.items()
-            },
+            "model_usage": {model: record.to_dict() for model, record in self._records.items()},
             "total_cost_usd": round(self.get_total_cost(), 6),
             "total_input_tokens": self.get_total_tokens()[0],
             "total_output_tokens": self.get_total_tokens()[1],

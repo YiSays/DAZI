@@ -6,20 +6,20 @@ Core modules import from this file when they need shared state.
 
 from __future__ import annotations
 
-from dazi.config import DATA_DIR
-from dazi.memory import MemoryStore
-from dazi.task_store import TaskStore
 from dazi.background import BackgroundTaskManager
-from dazi.settings import SettingsManager
+from dazi.config import DATA_DIR
+from dazi.coordinator import AutonomousTeammate
 from dazi.cost_tracker import CostTracker
-from dazi.mcp_client import MCPManager
-from dazi.skills import SkillRegistry
-from dazi.team import TeamManager
-from dazi.teammate import TeammateRunner
 from dazi.mailbox import Mailbox
+from dazi.mcp_client import MCPManager
+from dazi.memory import MemoryStore
 from dazi.permission_bridge import PermissionBridge
 from dazi.proactive import ProactiveManager
-from dazi.coordinator import AutonomousTeammate
+from dazi.settings import SettingsManager
+from dazi.skills import SkillRegistry
+from dazi.task_store import TaskStore
+from dazi.team import TeamManager
+from dazi.teammate import TeammateRunner
 from dazi.worktree import WorktreeManager
 
 # ── Path constants ──

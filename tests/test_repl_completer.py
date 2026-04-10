@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from io import StringIO
 
-import pytest
 from prompt_toolkit.completion import CompleteEvent
 from prompt_toolkit.document import Document
 from rich.console import Console
 
 from dazi.repl_completer import (
     COMMAND_REGISTRY,
-    CommandEntry,
     SlashCommandCompleter,
-    _build_skill_commands,
     print_help,
 )
 
@@ -60,7 +57,7 @@ class TestSlashCommandCompleter:
 
     def test_completes_partial_command(self):
         results = _complete(self.completer, "/qu")
-        assert "it" in results
+        assert "/quit" in results
 
     def test_completes_partial_cost(self):
         results = _complete(self.completer, "/co")
@@ -69,11 +66,10 @@ class TestSlashCommandCompleter:
         assert "mpact" in texts  # /compact
 
     def test_no_completions_after_full_match(self):
-        # "/quit" is a complete command with no subcommands — only yields empty append
+        # "/quit" is a complete command with no subcommands — yields itself
         results = _complete(self.completer, "/quit")
-        # Should yield at most the empty-string completion (nothing to append)
-        assert all(r == "" for r in results)
-        assert len(results) <= 1
+        assert "/quit" in results
+        assert len(results) == 1
 
     def test_mcp_subcommands_on_space(self):
         results = _complete_display(self.completer, "/mcp ")
@@ -106,17 +102,43 @@ class TestSlashCommandCompleter:
 
 class TestCommandRegistry:
     REQUIRED_COMMANDS = [
-        "quit", "clear", "cost", "settings", "reload", "help",
-        "plan", "go", "show", "tools",
-        "rules", "allow", "deny",
-        "hooks", "hook",
-        "remember", "forget", "memories", "reindex",
-        "tasks", "task", "bg",
-        "mcp", "skills", "skill",
-        "teams", "team",
-        "inbox", "send", "broadcast", "shutdown",
-        "proactive", "autonomous",
-        "worktree", "dazimd", "compact", "tokens",
+        "quit",
+        "clear",
+        "cost",
+        "settings",
+        "reload",
+        "help",
+        "plan",
+        "go",
+        "show",
+        "tools",
+        "rules",
+        "allow",
+        "deny",
+        "hooks",
+        "hook",
+        "remember",
+        "forget",
+        "memories",
+        "reindex",
+        "tasks",
+        "task",
+        "bg",
+        "mcp",
+        "skills",
+        "skill",
+        "teams",
+        "team",
+        "inbox",
+        "send",
+        "broadcast",
+        "shutdown",
+        "proactive",
+        "autonomous",
+        "worktree",
+        "dazimd",
+        "compact",
+        "tokens",
     ]
 
     def test_registry_covers_all_commands(self):

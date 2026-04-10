@@ -7,9 +7,9 @@ from rich.panel import Panel
 from rich.table import Table
 
 from dazi._singletons import mailbox, team_manager
-from dazi.theme import BORDER
 from dazi.task_store import TaskStore
 from dazi.team import TEAM_LEAD_NAME
+from dazi.theme import BORDER
 
 # Module-level team state (session-level, not per-conversation-turn)
 active_team_name: str | None = None
@@ -22,9 +22,7 @@ console = Console()
 def _require_team() -> bool:
     """Return True if an active team and agent identity are set."""
     if not active_team_name:
-        console.print(
-            "[red]No active team. Use /team <name> to activate a team first.[/red]"
-        )
+        console.print("[red]No active team. Use /team <name> to activate a team first.[/red]")
         return False
     if not current_agent_name:
         console.print("[red]Agent identity not set.[/red]")
@@ -36,9 +34,7 @@ def show_teams_table() -> None:
     """Show all teams in a Rich table."""
     teams = team_manager.list_teams()
     if not teams:
-        console.print(
-            "[dim]No teams exist. Use /team create <name> to create one.[/dim]"
-        )
+        console.print("[dim]No teams exist. Use /team create <name> to create one.[/dim]")
         return
 
     table = Table(title=f"Teams ({len(teams)})")
@@ -59,9 +55,7 @@ def show_teams_table() -> None:
         table.add_row(t.name, desc, str(len(t.members)), str(active), created, status)
 
     console.print(table)
-    console.print(
-        "[dim]Commands: /team <name> to activate, /team delete <name> to remove[/dim]"
-    )
+    console.print("[dim]Commands: /team <name> to activate, /team delete <name> to remove[/dim]")
 
 
 def show_team_detail(team_name: str) -> None:
@@ -86,9 +80,7 @@ def show_team_detail(team_name: str) -> None:
         }
         for m in team.members:
             icon = status_icons.get(m.status, f"[?]{m.status}[/?]")
-            lines.append(
-                f"  {icon}  [bold]{m.name}[/bold] ({m.agent_id}) — {m.agent_type}"
-            )
+            lines.append(f"  {icon}  [bold]{m.name}[/bold] ({m.agent_id}) — {m.agent_type}")
     else:
         lines.append("  (no members)")
 
@@ -129,7 +121,10 @@ def activate_team(name: str) -> None:
     console.print(f"[green]Switched to team: {name} (as team-lead)[/green]")
     console.print(f"[dim]Task board: {task_dir}[/dim]")
     console.print(
-        f"[dim]Inbox: {team_manager.teams_dir / team_manager._sanitize_name(name) / 'inboxes' / f'{TEAM_LEAD_NAME}.json'}[/dim]"
+        f"[dim]Inbox: "
+        f"{team_manager.teams_dir / team_manager._sanitize_name(name)}"
+        f"/inboxes/{TEAM_LEAD_NAME}.json"
+        "[/dim]"
     )
     if team.members:
         console.print(f"[dim]Members: {', '.join(m.name for m in team.members)}[/dim]")
@@ -159,9 +154,7 @@ def deactivate_team() -> None:
 async def show_inbox(agent_name: str | None = None) -> None:
     """Show inbox messages for an agent."""
     if not active_team_name:
-        console.print(
-            "[red]No active team. Use /team <name> to activate a team first.[/red]"
-        )
+        console.print("[red]No active team. Use /team <name> to activate a team first.[/red]")
         return
 
     target = agent_name or current_agent_name
@@ -212,9 +205,7 @@ async def send_repl_message(agent_name: str, text: str) -> None:
         return
 
     if agent_name == current_agent_name:
-        console.print(
-            f"[red]Cannot send a message to yourself ({current_agent_name}).[/red]"
-        )
+        console.print(f"[red]Cannot send a message to yourself ({current_agent_name}).[/red]")
         return
 
     from dazi.protocols import create_text_message

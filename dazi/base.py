@@ -8,9 +8,8 @@ LLM-facing tool interface; DaziTool instances carry our internal metadata.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
 
 class ToolSafety(Enum):
@@ -20,6 +19,7 @@ class ToolSafety(Enum):
     WRITE      = not read-only, not concurrency-safe (e.g. FileWrite)
     DESTRUCTIVE = irreversible operations (e.g. ShellExec, FileDelete)
     """
+
     SAFE = "safe"
     WRITE = "write"
     DESTRUCTIVE = "destructive"
@@ -32,6 +32,7 @@ class DaziTool:
     Defaults are conservative: tools are destructive, not concurrency-safe,
     and not read-only unless explicitly marked otherwise.
     """
+
     name: str
     description: str  # Short description for the LLM
     safety: ToolSafety = ToolSafety.DESTRUCTIVE  # Conservative default

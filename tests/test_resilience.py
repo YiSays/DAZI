@@ -1,8 +1,7 @@
 """Tests for dazi/resilience.py — abort signal, circuit breaker, retry."""
+
 from __future__ import annotations
 
-import asyncio
-import time
 from unittest.mock import AsyncMock
 
 import pytest
@@ -18,7 +17,6 @@ from dazi.resilience import (
     _is_retryable,
     with_retry,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # AbortSignal

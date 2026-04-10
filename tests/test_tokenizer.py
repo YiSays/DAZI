@@ -1,7 +1,6 @@
 """Tests for dazi.tokenizer — token counting, context windows, thresholds."""
 
-import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from dazi.tokenizer import (
     AUTOCOMPACT_BUFFER_TOKENS,
@@ -9,7 +8,6 @@ from dazi.tokenizer import (
     DEFAULT_CONTEXT_WINDOW,
     MAX_CONSECUTIVE_COMPACT_FAILURES,
     MESSAGE_OVERHEAD_TOKENS,
-    MODEL_CONTEXT_LIMITS,
     WARNING_THRESHOLD_BUFFER_TOKENS,
     count_message_tokens,
     count_messages_tokens,
@@ -64,9 +62,7 @@ class TestCountMessageTokens:
     def test_ai_with_tool_calls(self):
         msg = AIMessage(
             content="",
-            tool_calls=[
-                {"name": "file_reader", "args": {"file_path": "/tmp/test.py"}, "id": "1"}
-            ],
+            tool_calls=[{"name": "file_reader", "args": {"file_path": "/tmp/test.py"}, "id": "1"}],
         )
         tokens = count_message_tokens(msg, "gpt-4o")
         assert tokens > MESSAGE_OVERHEAD_TOKENS

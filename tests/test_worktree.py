@@ -1,4 +1,5 @@
-"""Tests for dazi/worktree.py — sanitize_agent_name, validate_slug, WorktreeConfig, WorktreeManager listing."""
+"""Tests for dazi/worktree.py — sanitize_agent_name, validate_slug, WorktreeConfig,
+WorktreeManager listing."""
 
 from __future__ import annotations
 
@@ -6,8 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from dazi.worktree import WorktreeConfig, WorktreeManager, Worktree
-
+from dazi.worktree import Worktree, WorktreeConfig, WorktreeManager
 
 # ─────────────────────────────────────────────────────────
 # sanitize_agent_name
@@ -141,7 +141,9 @@ class TestWorktreeManagerCreateRemove:
         mock_branch = type("R", (), {"returncode": 0, "stdout": "main\n", "stderr": ""})()
         mock_create = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
-        with patch("dazi.worktree.subprocess.run", side_effect=[mock_result, mock_branch, mock_create]):
+        with patch(
+            "dazi.worktree.subprocess.run", side_effect=[mock_result, mock_branch, mock_create]
+        ):
             wt = mgr.create("frontend")
             assert wt.id == "frontend"
             assert wt.branch == "agent-frontend"
@@ -164,7 +166,9 @@ class TestWorktreeManagerCreateRemove:
         mock_remove = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
         mock_branch_del = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
 
-        with patch("dazi.worktree.subprocess.run", side_effect=[mock_status, mock_remove, mock_branch_del]):
+        with patch(
+            "dazi.worktree.subprocess.run", side_effect=[mock_status, mock_remove, mock_branch_del]
+        ):
             result = mgr.remove("test", force=True)
             assert result is True
             assert mgr.get("test") is None

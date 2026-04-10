@@ -1,14 +1,10 @@
 """Tests for dazi.cost_tracker — pricing, cost calculation, persistence."""
 
-import json
-
 import pytest
 
 from dazi.cost_tracker import (
     DEFAULT_PRICING,
-    MODEL_PRICING,
     CostRecord,
-    CostTracker,
     _get_pricing,
     calculate_cost,
 )

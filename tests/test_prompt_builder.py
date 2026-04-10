@@ -1,9 +1,6 @@
 """Tests for dazi/prompt_builder.py — prompt sections and builder."""
+
 from __future__ import annotations
-
-from unittest.mock import patch
-
-import pytest
 
 from dazi.prompt_builder import (
     DYNAMIC_BOUNDARY,
@@ -16,7 +13,6 @@ from dazi.prompt_builder import (
     build_session_guidance,
     build_skills_section,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # PromptSection enum
@@ -166,7 +162,7 @@ class TestSystemPromptBuilder:
 
     def test_invalidate_on_dazimd_change(self):
         builder = SystemPromptBuilder()
-        prompt1 = builder.build(mode="execute")
+        builder.build(mode="execute")
         assert builder.is_cached is True
 
         builder.set_dazimd_content("New instruction")
@@ -184,7 +180,6 @@ class TestSystemPromptBuilder:
     def test_force_rebuild(self):
         builder = SystemPromptBuilder()
         builder.build()
-        cached = builder._static_cache
         builder.build(force_rebuild=True)
         # After force_rebuild, cache is rebuilt
         assert builder.is_cached is True

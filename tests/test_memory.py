@@ -4,15 +4,11 @@ from __future__ import annotations
 
 import re
 
-import pytest
-
 from dazi.memory import (
     MemoryCategory,
     MemoryEntry,
-    MemoryStore,
     _generate_id,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # MemoryCategory enum
@@ -232,16 +228,12 @@ class TestMemoryStoreFindRelevant:
         assert len(results) <= 3
 
     def test_empty_query(self, mock_memory_store):
-        mock_memory_store.write(
-            MemoryEntry(content="something", id="e1")
-        )
+        mock_memory_store.write(MemoryEntry(content="something", id="e1"))
         results = mock_memory_store.find_relevant("")
         assert results == []
 
     def test_no_matching_entries(self, mock_memory_store):
-        mock_memory_store.write(
-            MemoryEntry(content="apples and oranges", id="fruit")
-        )
+        mock_memory_store.write(MemoryEntry(content="apples and oranges", id="fruit"))
         results = mock_memory_store.find_relevant("quantum physics")
         assert results == []
 
@@ -266,8 +258,12 @@ class TestMemoryStoreRebuildIndex:
         assert "User" in content
 
     def test_groups_by_category(self, mock_memory_store):
-        e1 = MemoryEntry(content="u", category=MemoryCategory.USER, id="u1", description="user entry")
-        e2 = MemoryEntry(content="p", category=MemoryCategory.PROJECT, id="p1", description="project entry")
+        e1 = MemoryEntry(
+            content="u", category=MemoryCategory.USER, id="u1", description="user entry"
+        )
+        e2 = MemoryEntry(
+            content="p", category=MemoryCategory.PROJECT, id="p1", description="project entry"
+        )
         mock_memory_store.write(e1)
         mock_memory_store.write(e2)
         content = mock_memory_store.get_index_content()

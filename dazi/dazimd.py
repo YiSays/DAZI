@@ -21,16 +21,16 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
-
 
 # ─────────────────────────────────────────────────────────
 # DAZI.md FILE
 # ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class DaziMdFile:
     """A discovered DAZI.md file with its priority."""
+
     path: Path
     priority: int
     content: str = ""
@@ -41,9 +41,9 @@ class DaziMdFile:
 # ─────────────────────────────────────────────────────────
 
 # Priority constants (higher = more important)
-PRIORITY_LOCAL = 400      # DAZI.local.md — private, project-specific
-PRIORITY_PROJECT = 300    # DAZI.md — checked-in, shared with team
-PRIORITY_GLOBAL = 100     # ~/.dazi/DAZI.md — user global
+PRIORITY_LOCAL = 400  # DAZI.local.md — private, project-specific
+PRIORITY_PROJECT = 300  # DAZI.md — checked-in, shared with team
+PRIORITY_GLOBAL = 100  # ~/.dazi/DAZI.md — user global
 
 
 # ─────────────────────────────────────────────────────────
@@ -56,6 +56,7 @@ INCLUDE_PATTERN = re.compile(r"^@include\s+(.+)$", re.MULTILINE)
 # ─────────────────────────────────────────────────────────
 # DISCOVERY
 # ─────────────────────────────────────────────────────────
+
 
 def discover_dazimd_files(
     project_root: Path | None = None,
@@ -84,11 +85,13 @@ def discover_dazimd_files(
             try:
                 content = path.read_text(encoding="utf-8")
                 resolved = resolve_includes(content, path.parent)
-                files.append(DaziMdFile(
-                    path=path,
-                    priority=priority,
-                    content=resolved,
-                ))
+                files.append(
+                    DaziMdFile(
+                        path=path,
+                        priority=priority,
+                        content=resolved,
+                    )
+                )
             except Exception:
                 pass  # Skip files we can't read
 
@@ -110,6 +113,7 @@ def discover_dazimd_files(
 # ─────────────────────────────────────────────────────────
 # @include RESOLUTION
 # ─────────────────────────────────────────────────────────
+
 
 def resolve_includes(content: str, base_path: Path) -> str:
     """Process @include directives in DAZI.md content.
@@ -175,6 +179,7 @@ def _resolve_includes_inner(
 # ─────────────────────────────────────────────────────────
 # MERGE LOADED FILES
 # ─────────────────────────────────────────────────────────
+
 
 def merge_dazimd_content(files: list[DaziMdFile]) -> str:
     """Merge multiple DAZI.md files into a single content string.

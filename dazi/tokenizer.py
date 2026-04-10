@@ -10,8 +10,7 @@ KEY CONCEPTS:
 from __future__ import annotations
 
 import tiktoken
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
-
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
 # ─────────────────────────────────────────────────────────
 # CONSTANTS
@@ -50,6 +49,7 @@ MESSAGE_OVERHEAD_TOKENS = 4
 # ─────────────────────────────────────────────────────────
 # TOKEN COUNTING
 # ─────────────────────────────────────────────────────────
+
 
 def _get_encoding(model: str) -> tiktoken.Encoding | None:
     """Get tiktoken encoding for a model.
@@ -128,11 +128,20 @@ def count_messages_tokens(messages: list[BaseMessage], model: str = "") -> int:
 # CONTEXT WINDOW MANAGEMENT
 # ─────────────────────────────────────────────────────────
 
+
 def get_context_window(model: str) -> int:
     """Get the context window size for a model.
 
+    Priority: settings override > exact match > prefix match > default.
     Falls back to DEFAULT_CONTEXT_WINDOW if model not in lookup.
     """
+    # Check user override in settings first
+    from dazi._singletons import settings_manager
+
+    cw = settings_manager.settings.context_window
+    if cw is not None:
+        return cw
+
     # Try exact match first
     if not model or model in MODEL_CONTEXT_LIMITS:
         return MODEL_CONTEXT_LIMITS.get(model, DEFAULT_CONTEXT_WINDOW)

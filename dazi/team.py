@@ -19,9 +19,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
+
 from dazi.base import DaziTool, ToolSafety
 from dazi.config import DATA_DIR
-
 
 # ─────────────────────────────────────────────────────────
 # CONSTANTS
@@ -39,10 +41,11 @@ class TeamMember:
 
     Each member has a unique agent_id in format "name@team".
     """
-    name: str                                    # "frontend", "backend"
-    agent_id: str                                # "frontend@web-dev"
-    agent_type: str = "general-purpose"          # agent type for tool scoping
-    status: str = "active"                       # "active" | "idle" | "completed"
+
+    name: str  # "frontend", "backend"
+    agent_id: str  # "frontend@web-dev"
+    agent_type: str = "general-purpose"  # agent type for tool scoping
+    status: str = "active"  # "active" | "idle" | "completed"
     joined_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
@@ -55,6 +58,7 @@ class TeamConfig:
 
     Stored as JSON at .dazi/teams/{name}/config.json (under project root).
     """
+
     name: str
     description: str = ""
     members: list[TeamMember] = field(default_factory=list)
@@ -86,6 +90,7 @@ class TeamConfig:
 # ─────────────────────────────────────────────────────────
 class TeamError(Exception):
     """Raised for team operation errors."""
+
     pass
 
 
@@ -100,7 +105,8 @@ class TeamManager:
         """Initialize TeamManager.
 
         Args:
-            base_dir: Root directory for team data. Defaults to DATA_DIR (.dazi/ under project root).
+            base_dir: Root directory for team data.
+                Defaults to DATA_DIR (.dazi/ under project root).
         """
         self.base_dir = base_dir or DATA_DIR
         self.teams_dir = self.base_dir / "teams"
@@ -177,9 +183,7 @@ class TeamManager:
         return config
 
     def get_team(self, name: str) -> TeamConfig | None:
-        """Get a team by name.
-
-        """
+        """Get a team by name."""
         config_path = self._config_path(name)
         if not config_path.exists():
             return None
@@ -191,9 +195,7 @@ class TeamManager:
             raise TeamError(f"Corrupted team config for '{name}': {e}")
 
     def list_teams(self) -> list[TeamConfig]:
-        """List all teams.
-
-        """
+        """List all teams."""
         teams: list[TeamConfig] = []
 
         if not self.teams_dir.exists():
@@ -231,9 +233,7 @@ class TeamManager:
         return member
 
     def remove_member(self, team_name: str, agent_id: str) -> bool:
-        """Remove a member from a team.
-
-        """
+        """Remove a member from a team."""
         config = self.get_team(team_name)
         if config is None:
             return False
@@ -259,9 +259,7 @@ class TeamManager:
         return None
 
     def update_member_status(self, team_name: str, agent_id: str, status: str) -> bool:
-        """Update a member's status.
-
-        """
+        """Update a member's status."""
         config = self.get_team(team_name)
         if config is None:
             return False
@@ -291,7 +289,8 @@ class TeamManager:
         if active_members:
             names = ", ".join(m.name for m in active_members)
             raise TeamError(
-                f"Cannot delete team '{team_name}': {len(active_members)} active member(s): {names}. "
+                f"Cannot delete team '{team_name}': "
+                f"{len(active_members)} active member(s): {names}. "
                 f"Shut down all teammates before deleting."
             )
 
@@ -314,9 +313,7 @@ class TeamManager:
     # ── Internal ──
 
     def _write_config(self, config: TeamConfig) -> None:
-        """Write team config to disk.
-
-        """
+        """Write team config to disk."""
         config_path = self._config_path(config.name)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(
@@ -328,9 +325,6 @@ class TeamManager:
 # ─────────────────────────────────────────────────────────
 # TEAM TOOLS
 # ─────────────────────────────────────────────────────────
-
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
 
 
 class CreateTeamInput(BaseModel):
@@ -344,7 +338,6 @@ async def create_team_func(name: str, description: str = "") -> str:
 
     try:
         team = team_manager.create_team(name, description)
-        sanitized = team_manager._sanitize_name(name)
         return (
             f"Team created: {team.name}\n"
             f"Description: {team.description}\n"
@@ -363,7 +356,9 @@ create_team_tool = StructuredTool.from_function(
     description="Create a new agent team with a shared task board.",
     args_schema=CreateTeamInput,
 )
-create_team_meta = DaziTool(name="create_team", description="Create a new agent team.", safety=ToolSafety.WRITE)
+create_team_meta = DaziTool(
+    name="create_team", description="Create a new agent team.", safety=ToolSafety.WRITE
+)
 
 
 class DeleteTeamInput(BaseModel):
@@ -388,10 +383,15 @@ delete_team_tool = StructuredTool.from_function(
     func=lambda **kwargs: "",
     coroutine=delete_team_func,
     name="delete_team",
-    description="Delete a team and clean up its config and task directory. Fails if any active members exist.",
+    description=(
+        "Delete a team and clean up its config and task directory. "
+        "Fails if any active members exist."
+    ),
     args_schema=DeleteTeamInput,
 )
-delete_team_meta = DaziTool(name="delete_team", description="Delete a team.", safety=ToolSafety.DESTRUCTIVE)
+delete_team_meta = DaziTool(
+    name="delete_team", description="Delete a team.", safety=ToolSafety.DESTRUCTIVE
+)
 
 
 class ListTeamsInput(BaseModel):
@@ -412,7 +412,10 @@ async def list_teams_func() -> str:
         idle = sum(1 for m in t.members if m.status == "idle")
         completed = sum(1 for m in t.members if m.status == "completed")
         lines.append(f"  * {t.name} — {t.description or '(no description)'}")
-        lines.append(f"    Members: {len(t.members)} total ({active} active, {idle} idle, {completed} completed)")
+        lines.append(
+            f"    Members: {len(t.members)} total "
+            f"({active} active, {idle} idle, {completed} completed)"
+        )
         lines.append(f"    Created: {t.created_at[:10] if t.created_at else 'unknown'}")
         lines.append("")
 
@@ -465,7 +468,11 @@ show_team_tool = StructuredTool.from_function(
     func=lambda **kwargs: "",
     coroutine=show_team_func,
     name="show_team",
-    description="Show detailed information about a team including all members and their current status.",
+    description=(
+        "Show detailed information about a team including all members and their current status."
+    ),
     args_schema=ShowTeamInput,
 )
-show_team_meta = DaziTool(name="show_team", description="Show detailed team info.", safety=ToolSafety.SAFE)
+show_team_meta = DaziTool(
+    name="show_team", description="Show detailed team info.", safety=ToolSafety.SAFE
+)

@@ -1,7 +1,8 @@
 """File-based mailbox system for inter-agent messaging.
 
 KEY CONCEPTS:
-  1. Each agent has a JSON inbox file at .dazi/teams/{team}/inboxes/{agent}.json (under project root)
+  1. Each agent has a JSON inbox file at
+     .dazi/teams/{team}/inboxes/{agent}.json (under project root)
   2. Messages are stored as a JSON array of message dicts
   3. File locking (fcntl.flock) prevents concurrent write corruption
   4. Broadcast (*) writes to every team member's inbox except sender
@@ -17,9 +18,12 @@ import json
 import re
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
 from dazi.base import DaziTool, ToolSafety
 
@@ -33,11 +37,11 @@ class Message:
 
     id: str
     from_agent: str
-    to_agent: str                       # Agent name or "*" for broadcast
+    to_agent: str  # Agent name or "*" for broadcast
     text: str
-    timestamp: str                       # ISO 8601
+    timestamp: str  # ISO 8601
     summary: str = ""
-    msg_type: str = "text"               # text, shutdown_request, shutdown_response, etc.
+    msg_type: str = "text"  # text, shutdown_request, shutdown_response, etc.
     read: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -63,7 +67,7 @@ class Message:
             from_agent=data.get("from_agent", ""),
             to_agent=data.get("to_agent", ""),
             text=data.get("text", ""),
-            timestamp=data.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            timestamp=data.get("timestamp", datetime.now(UTC).isoformat()),
             summary=data.get("summary", ""),
             msg_type=data.get("msg_type", "text"),
             read=data.get("read", False),
@@ -120,7 +124,7 @@ class Mailbox:
         if not path.exists():
             return []
 
-        with open(path, "r") as f:
+        with open(path) as f:
             fcntl.flock(f, fcntl.LOCK_SH)
             try:
                 data = json.load(f)
@@ -182,7 +186,7 @@ class Mailbox:
         if not message.id:
             message.id = str(uuid.uuid4())
         if not message.timestamp:
-            message.timestamp = datetime.now(timezone.utc).isoformat()
+            message.timestamp = datetime.now(UTC).isoformat()
 
         recipients: list[str] = []
 
@@ -312,10 +316,6 @@ class Mailbox:
 # MESSAGING TOOLS
 # ─────────────────────────────────────────────────────────
 
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
-from dazi.protocols import create_text_message, create_idle_notification
-
 
 class SendMessageInput(BaseModel):
     to: str = Field(description="Recipient agent name or '*' for broadcast to all team members")
@@ -325,7 +325,8 @@ class SendMessageInput(BaseModel):
 
 async def send_message_func(to: str, message: str, summary: str = "") -> str:
     """Send a message to a teammate or broadcast to all."""
-    from dazi._singletons import mailbox, team_manager, active_team_name, current_agent_name
+    from dazi._singletons import active_team_name, current_agent_name, mailbox, team_manager
+    from dazi.protocols import create_text_message
 
     if not active_team_name:
         return "Error: no active team. Use /team <name> to activate a team first."
@@ -344,9 +345,13 @@ async def send_message_func(to: str, message: str, summary: str = "") -> str:
         if not team_members:
             return f"Error: no team members found for '{active_team_name}'."
 
-    msg = create_text_message(from_agent=current_agent_name, to_agent=to, text=message, summary=summary)
+    msg = create_text_message(
+        from_agent=current_agent_name, to_agent=to, text=message, summary=summary
+    )
 
-    recipients = await mailbox.send(team_name=active_team_name, message=msg, team_members=team_members)
+    recipients = await mailbox.send(
+        team_name=active_team_name, message=msg, team_members=team_members
+    )
 
     if to == "*":
         return f"Broadcast sent to {len(recipients)} teammate(s): {', '.join(recipients)}"
@@ -364,7 +369,9 @@ send_message_tool = StructuredTool.from_function(
     description="Send a message to a teammate or broadcast to all team members.",
     args_schema=SendMessageInput,
 )
-send_message_meta = DaziTool(name="send_message", description="Send a message to a teammate.", safety=ToolSafety.WRITE)
+send_message_meta = DaziTool(
+    name="send_message", description="Send a message to a teammate.", safety=ToolSafety.WRITE
+)
 
 
 class CheckInboxInput(BaseModel):
@@ -374,7 +381,7 @@ class CheckInboxInput(BaseModel):
 
 async def check_inbox_func(unread_only: bool = True, limit: int = 20) -> str:
     """Check the current agent's inbox for messages."""
-    from dazi._singletons import mailbox, active_team_name, current_agent_name
+    from dazi._singletons import active_team_name, current_agent_name, mailbox
 
     if not active_team_name:
         return "Error: no active team. Use /team <name> to activate a team first."
@@ -393,7 +400,9 @@ async def check_inbox_func(unread_only: bool = True, limit: int = 20) -> str:
         return "No unread messages." if unread_only else "No messages."
 
     msg_ids = [m.id for m in messages]
-    await mailbox.mark_read(team_name=active_team_name, agent_name=current_agent_name, message_ids=msg_ids)
+    await mailbox.mark_read(
+        team_name=active_team_name, agent_name=current_agent_name, message_ids=msg_ids
+    )
 
     lines = [f"Inbox ({len(messages)} message(s)):", ""]
     for msg in messages:
@@ -417,7 +426,9 @@ check_inbox_tool = StructuredTool.from_function(
     description="Check your inbox for new messages. Returns unread messages by default.",
     args_schema=CheckInboxInput,
 )
-check_inbox_meta = DaziTool(name="check_inbox", description="Check your inbox for messages.", safety=ToolSafety.SAFE)
+check_inbox_meta = DaziTool(
+    name="check_inbox", description="Check your inbox for messages.", safety=ToolSafety.SAFE
+)
 
 
 async def send_idle_notification(
@@ -429,6 +440,7 @@ async def send_idle_notification(
 ) -> None:
     """Send an idle notification to all teammates."""
     from dazi._singletons import mailbox, team_manager
+    from dazi.protocols import create_idle_notification
 
     team = team_manager.get_team(team_name)
     team_members = [m.name for m in team.members] if team else None

@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 from rich.align import Align
-
-from dazi.theme import BORDER, PROMPT
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+import dazi.graph as _graph_mod
 from dazi._singletons import (
     background_manager,
-    memory_store,
     mcp_manager,
+    memory_store,
     skill_registry,
     task_store,
 )
@@ -24,13 +23,12 @@ from dazi.hooks import HookEvent, HookResult
 from dazi.llm import _get_model_name
 from dazi.permissions import PermissionBehavior
 from dazi.task_store import TaskStore
+from dazi.theme import BORDER, PROMPT
 from dazi.tokenizer import (
     count_messages_tokens,
     get_context_window,
     get_token_warning_state,
 )
-
-import dazi.graph as _graph_mod
 
 console = Console()
 
@@ -320,7 +318,7 @@ def show_background_task_detail(task_id: str) -> None:
     # Show output
     output = background_manager.get_output_tail(task_id, lines=30)
     if output:
-        lines.append(f"\n[bold]Output (last 30 lines):[/bold]")
+        lines.append("\n[bold]Output (last 30 lines):[/bold]")
         lines.append("```")
         lines.append(output)
         lines.append("```")
@@ -354,7 +352,8 @@ def show_mcp_servers_table() -> None:
     if not servers:
         console.print("[dim]No MCP servers configured.[/dim]")
         console.print(
-            '[dim]Add servers via settings.json: {"mcpServers": {"name": {"command": "...", "args": [...]}}}[/dim]'
+            "[dim]Add servers via settings.json: "
+            '{"mcpServers": {"name": {"command": "...", "args": [...]}}}[/dim]'
         )
         return
 
@@ -406,7 +405,11 @@ def show_mcp_server_detail(server_name: str) -> None:
     if conn.error:
         config_text += f"\nError: {conn.error}"
     console.print(
-        Panel(config_text, title=f"[cyan]{server_name}[/cyan]", border_style=BORDER["primary"])
+        Panel(
+            config_text,
+            title=f"[cyan]{server_name}[/cyan]",
+            border_style=BORDER["primary"],
+        )
     )
 
     # Tools
@@ -418,9 +421,7 @@ def show_mcp_server_detail(server_name: str) -> None:
         tool_table.add_column("Description", max_width=60)
         for t in conn.tools:
             ro = "[green]yes[/green]" if t.is_read_only else "[dim]no[/dim]"
-            desc = (
-                t.description[:60] + "..." if len(t.description) > 60 else t.description
-            )
+            desc = t.description[:60] + "..." if len(t.description) > 60 else t.description
             tool_table.add_row(t.qualified_name, t.name, ro, desc)
         console.print(tool_table)
     elif conn.status == MCPServerStatus.CONNECTED:
@@ -459,7 +460,9 @@ def show_skills_table() -> None:
         source = (
             "bundled"
             if s.is_bundled
-            else str(s.source_path.parent.name) if s.source_path else "unknown"
+            else str(s.source_path.parent.name)
+            if s.source_path
+            else "unknown"
         )
         invocable = "[green]yes[/green]" if s.user_invocable else "[dim]no[/dim]"
         desc = s.description[:50] + "..." if len(s.description) > 50 else s.description
@@ -496,7 +499,9 @@ def show_skill_detail(skill_name: str) -> None:
     source = (
         "bundled"
         if skill.is_bundled
-        else str(skill.source_path) if skill.source_path else "unknown"
+        else str(skill.source_path)
+        if skill.source_path
+        else "unknown"
     )
     lines.append(f"Source: {source}")
 
@@ -519,21 +524,51 @@ def show_skill_detail(skill_name: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────
+# USER MESSAGE
+# ─────────────────────────────────────────────────────────
+
+
+def render_user_panel(user_input: str, console: Console) -> None:
+    """Render user input as a right-aligned chat-bubble Panel."""
+    from dazi.theme import BORDER, RICH
+
+    panel = Panel(
+        Markdown(user_input, justify="right"),
+        title=f"[{RICH['user_title']}]YOU[/{RICH['user_title']}]",
+        title_align="right",
+        border_style=BORDER["user"],
+        padding=(0, 1),
+    )
+    console.print(Align.right(panel))
+
+
+def render_dazi_panel(text: str, console: Console) -> None:
+    """Render AI response as a left-aligned Panel."""
+    from dazi.theme import BORDER, RICH
+
+    console.print(
+        Panel(
+            Markdown(text),
+            title=f"[{RICH['primary']}]DAZI[/{RICH['primary']}]",
+            title_align="left",
+            border_style=BORDER["info"],
+            padding=(0, 1),
+        )
+    )
+
+
+# ─────────────────────────────────────────────────────────
 # HOOKS (demo)
 # ─────────────────────────────────────────────────────────
 
 
 def add_demo_hook() -> None:
-    async def logging_hook(
-        tool_name: str = "", tool_args: dict = None, **kwargs
-    ) -> HookResult:
+    async def logging_hook(tool_name: str = "", tool_args: dict = None, **kwargs) -> HookResult:
         args_display = str(tool_args or {})[:100]
         console.print(f"  [dim][hook] pre_tool_use: {tool_name}({args_display})[/dim]")
         return HookResult()
 
-    _graph_mod.hook_registry.register(
-        HookEvent.PRE_TOOL_USE, logging_hook, priority=100
-    )
+    _graph_mod.hook_registry.register(HookEvent.PRE_TOOL_USE, logging_hook, priority=100)
     console.print("[green]Registered logging hook (priority=100).[/green]")
 
 
@@ -543,25 +578,17 @@ def add_demo_hook() -> None:
 
 
 def print_ascii_banner(console: Console, *, version: str) -> None:
-    """Print DAZI ASCII art banner with Rich two-column layout."""
+    """Print DAZI ASCII art banner in a single Panel with two-column layout."""
     from datetime import datetime
-    from rich.columns import Columns
 
     block_lines = [
-        "██████╗    ████╗  ███████╗ ██████╗",
-        "██╔══██╗  ██╔═██╗ ╚══███╔╝ ╚═██╔═╝",
-        "██║  ██║  ██║ ██║   ███╔╝    ██║",
-        "██║  ██║ ███████║  ███╔╝     ██║",
-        "██████╔╝ ██╔══██║ ███████╗ ██████╗",
+        "██████╗   █████╗  ███████╗ ██████╗",
+        "██╔══██╗ ██╔══██╗ ╚══███╔╝ ╚═██╔═╝",
+        "██║  ██║ ███████║   ███╔╝    ██║",
+        "██║  ██║ ██╔══██║  ███╔╝     ██║",
+        "██████╔╝ ██║  ██║ ███████╗ ██████╗",
         "╚═════╝  ╚═╝  ╚═╝ ╚══════╝ ╚═════╝",
     ]
-
-    logo_text = "\n".join(block_lines)
-    logo_panel = Panel(
-        Align.center(logo_text, vertical="middle"),
-        style="bold cyan",
-        padding=(0, 1),
-    )
 
     now = datetime.now()
     hour = now.hour
@@ -576,24 +603,43 @@ def print_ascii_banner(console: Console, *, version: str) -> None:
     else:
         greeting = "Late night coding"
 
-    messages = [
-        f"[bold magenta]{greeting}! 💡[/bold magenta]",
-        "",
-        f"[dim]{now:%A, %B %d, %Y — %H:%M}[/dim]",
-        "",
-        "🔮 DAZI is ready, and Happy Coding! ✨",
-        "[italic cyan]DAZI - Develop Autonomously, Zero Interruption.[/italic cyan]",
-    ]
-    greeting_panel = Panel(
-        "\n".join(messages),
-        title="[bold cyan]  DAZI  ",
-        subtitle=f"[dim]v{version}[/dim]",
-        border_style=BORDER["brand"],
-        padding=(0, 2),
+    from dazi.config import PROJECT_ROOT
+
+    messages = (
+        f"[bold magenta]{greeting}! 💡[/bold magenta]\n\n"
+        f"[dim]{now:%A, %B %d, %Y — %H:%M}[/dim]\n"
+        f"[dim]{str(PROJECT_ROOT).replace(str(PROJECT_ROOT.home()), '~')}[/dim]\n"
+        "[dim]Type / for commands, Tab for autocompletion.[/dim]\n"
+        "[dim]Ctrl+Q to quit.[/dim]"
+    )
+
+    inner = Table(
+        show_header=False,
+        show_edge=False,
+        expand=True,
+        padding=(0, 1),
+        border_style="cyan",
+    )
+    inner.add_column(ratio=1)
+    inner.add_column(ratio=1)
+    inner.add_row(
+        Align.center("[bold cyan]" + "\n".join(block_lines) + "[/bold cyan]", vertical="middle"),
+        Align.center(messages, vertical="middle"),
     )
 
     console.print()
-    console.print(Columns([logo_panel, greeting_panel], expand=True, equal=False))
+    console.print(
+        Panel(
+            inner,
+            title="[cyan]  DAZI  [/cyan]",
+            subtitle=(
+                f"[italic cyan]  Develop Autonomously, "
+                f"Zero Interruption. v{version}[/italic cyan]  "
+            ),
+            border_style=BORDER["brand"],
+            padding=(1, 1),
+        )
+    )
     console.print()
 
 
@@ -609,21 +655,20 @@ def print_welcome_message(
     from dazi._singletons import (
         background_manager,
         memory_store,
-        settings_manager,
-        task_store,
     )
     from dazi.llm import _get_model_name
     from dazi.tokenizer import get_context_window
 
-    console.print("[dim]Type /help for commands. Tab to autocomplete. Ctrl+Q to quit.[/dim]")
-
+    # console.print("[dim]Type /help for commands. Tab to autocomplete. Ctrl+Q to quit.[/dim]")
 
     model = _get_model_name()
-    settings_rules = settings_manager.get_permission_rules()
     _cur_task_store = _teams.team_task_store if _teams.active_team_name else task_store
+    all_servers = mcp_manager.list_servers()
+    mcp_total = len(all_servers)
+    mcp_connected = sum(1 for s in all_servers if s["status"] == "connected")
     console.print(
-        f"\n[dim]Model: {model} | Context: {get_context_window(model):,} tokens | "
-        f"Settings rules: {len(settings_rules)} | "
+        f"[dim]Model: {model} | Context: {get_context_window(model):,} tokens | "
+        f"MCP: {mcp_connected}/{mcp_total} | "
         f"Memories: {len(memory_store.list_all())} | Tasks: {len(_cur_task_store.list_all())} | "
         f"Background: {len(background_manager.list_active())} active | Skills: {skill_count} | "
         f"Teams: {team_count} | "

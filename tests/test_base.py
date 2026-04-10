@@ -38,9 +38,7 @@ class TestDaziTool:
         assert tool.is_read_only is False
 
     def test_destructive_flags(self):
-        tool = DaziTool(
-            name="rm", description="Delete", safety=ToolSafety.DESTRUCTIVE
-        )
+        tool = DaziTool(name="rm", description="Delete", safety=ToolSafety.DESTRUCTIVE)
         assert tool.is_concurrency_safe is False
         assert tool.is_read_only is False
 

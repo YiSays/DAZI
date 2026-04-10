@@ -3,20 +3,16 @@
 import pytest
 
 from dazi.permissions import (
-    MODE_DEFAULTS,
-    SOURCE_PRIORITY,
     PermissionBehavior,
     PermissionMode,
-    PermissionResult,
     PermissionRule,
     _shell_command_matches,
     check_permission,
     derive_permission_pattern,
-    prompt_permission_decisions,
     parse_rule,
     parse_rules,
+    prompt_permission_decisions,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # ENUM VALUES
@@ -183,9 +179,7 @@ class TestShellCommandMatches:
         assert _shell_command_matches("rm /tmp/old | cat file", "rm *") is True
 
     def test_pipeline_multi_pipe(self):
-        assert _shell_command_matches(
-            "cat file | grep foo | rm /tmp/old", "rm /tmp/*"
-        ) is True
+        assert _shell_command_matches("cat file | grep foo | rm /tmp/old", "rm /tmp/*") is True
 
 
 # ─────────────────────────────────────────────────────────
@@ -354,61 +348,43 @@ class TestDerivePermissionPattern:
     # ── File path (unchanged) ──
 
     def test_file_path(self):
-        pattern = derive_permission_pattern(
-            "file_writer", {"file_path": "/tmp/test.py"}
-        )
+        pattern = derive_permission_pattern("file_writer", {"file_path": "/tmp/test.py"})
         assert pattern == "/tmp/*"
 
     def test_nested_file_path(self):
-        pattern = derive_permission_pattern(
-            "file_writer", {"file_path": "/home/user/src/main.py"}
-        )
+        pattern = derive_permission_pattern("file_writer", {"file_path": "/home/user/src/main.py"})
         assert pattern == "/home/user/src/*"
 
     # ── Subcommand awareness ──
 
     def test_git_subcommand(self):
-        pattern = derive_permission_pattern(
-            "shell_exec", {"command": "git push origin main"}
-        )
+        pattern = derive_permission_pattern("shell_exec", {"command": "git push origin main"})
         assert pattern == "git push *"
 
     def test_npm_subcommand(self):
-        pattern = derive_permission_pattern(
-            "shell_exec", {"command": "npm install lodash"}
-        )
+        pattern = derive_permission_pattern("shell_exec", {"command": "npm install lodash"})
         assert pattern == "npm install *"
 
     def test_docker_subcommand(self):
-        pattern = derive_permission_pattern(
-            "shell_exec", {"command": "docker build -t app ."}
-        )
+        pattern = derive_permission_pattern("shell_exec", {"command": "docker build -t app ."})
         assert pattern == "docker build *"
 
     def test_non_subcommand_command(self):
-        pattern = derive_permission_pattern(
-            "shell_exec", {"command": "echo hello world"}
-        )
+        pattern = derive_permission_pattern("shell_exec", {"command": "echo hello world"})
         assert pattern == "echo *"
 
     # ── Path argument awareness ──
 
     def test_find_with_path(self):
-        pattern = derive_permission_pattern(
-            "shell_exec", {"command": "find /tmp -name '*.py'"}
-        )
+        pattern = derive_permission_pattern("shell_exec", {"command": "find /tmp -name '*.py'"})
         assert pattern == "find /tmp/*"
 
     def test_rm_with_path(self):
-        pattern = derive_permission_pattern(
-            "shell_exec", {"command": "rm -rf /var/log/app.log"}
-        )
+        pattern = derive_permission_pattern("shell_exec", {"command": "rm -rf /var/log/app.log"})
         assert pattern == "rm /var/log/*"
 
     def test_ls_with_relative_path(self):
-        pattern = derive_permission_pattern(
-            "shell_exec", {"command": "ls ./src/components/"}
-        )
+        pattern = derive_permission_pattern("shell_exec", {"command": "ls ./src/components/"})
         assert pattern == "ls ./src/components/*"
 
     # ── URL argument awareness ──
@@ -429,9 +405,7 @@ class TestDerivePermissionPattern:
 
     def test_pipeline_picks_most_specific(self):
         # rm /tmp/old/* is more specific than cat *
-        pattern = derive_permission_pattern(
-            "shell_exec", {"command": "cat file | rm /tmp/old"}
-        )
+        pattern = derive_permission_pattern("shell_exec", {"command": "cat file | rm /tmp/old"})
         assert pattern == "rm /tmp/old/*"
 
     def test_pipeline_with_chain(self):
@@ -453,16 +427,12 @@ class TestDerivePermissionPattern:
 
     def test_command_flags_only(self):
         # No non-flag args — fallback to cmd + wildcard
-        pattern = derive_permission_pattern(
-            "shell_exec", {"command": "ls -la"}
-        )
+        pattern = derive_permission_pattern("shell_exec", {"command": "ls -la"})
         assert pattern == "ls *"
 
     def test_find_with_current_dir(self):
         # find . should not become "find *" — it should be "find ./*"
-        pattern = derive_permission_pattern(
-            "shell_exec", {"command": "find . -name '*.py'"}
-        )
+        pattern = derive_permission_pattern("shell_exec", {"command": "find . -name '*.py'"})
         assert pattern == "find ./*"
 
 
@@ -480,9 +450,16 @@ class TestPromptPermissionDecisions:
         session.prompt_async = AsyncMock(return_value="y")
         console = MagicMock()
         decisions = await prompt_permission_decisions(
-            [{"tool_call_id": "tc1", "tool_name": "shell_exec",
-              "tool_args": {"command": "ls"}, "reason": "test"}],
-            session, console,
+            [
+                {
+                    "tool_call_id": "tc1",
+                    "tool_name": "shell_exec",
+                    "tool_args": {"command": "ls"},
+                    "reason": "test",
+                }
+            ],
+            session,
+            console,
         )
         assert decisions["tc1"]["action"] == "allow"
 
@@ -494,9 +471,16 @@ class TestPromptPermissionDecisions:
         session.prompt_async = AsyncMock(return_value="")
         console = MagicMock()
         decisions = await prompt_permission_decisions(
-            [{"tool_call_id": "tc1", "tool_name": "shell_exec",
-              "tool_args": {"command": "ls"}, "reason": "test"}],
-            session, console,
+            [
+                {
+                    "tool_call_id": "tc1",
+                    "tool_name": "shell_exec",
+                    "tool_args": {"command": "ls"},
+                    "reason": "test",
+                }
+            ],
+            session,
+            console,
         )
         assert decisions["tc1"]["action"] == "deny"
 
@@ -508,9 +492,16 @@ class TestPromptPermissionDecisions:
         session.prompt_async = AsyncMock(return_value="no")
         console = MagicMock()
         decisions = await prompt_permission_decisions(
-            [{"tool_call_id": "tc1", "tool_name": "shell_exec",
-              "tool_args": {"command": "ls"}, "reason": "test"}],
-            session, console,
+            [
+                {
+                    "tool_call_id": "tc1",
+                    "tool_name": "shell_exec",
+                    "tool_args": {"command": "ls"},
+                    "reason": "test",
+                }
+            ],
+            session,
+            console,
         )
         assert decisions["tc1"]["action"] == "deny"
 
@@ -519,14 +510,19 @@ class TestPromptPermissionDecisions:
         from unittest.mock import AsyncMock, MagicMock
 
         session = AsyncMock()
-        session.prompt_async = AsyncMock(
-            return_value="I already created the folder manually"
-        )
+        session.prompt_async = AsyncMock(return_value="I already created the folder manually")
         console = MagicMock()
         decisions = await prompt_permission_decisions(
-            [{"tool_call_id": "tc1", "tool_name": "shell_exec",
-              "tool_args": {"command": "mkdir tmp/data"}, "reason": "write"}],
-            session, console,
+            [
+                {
+                    "tool_call_id": "tc1",
+                    "tool_name": "shell_exec",
+                    "tool_args": {"command": "mkdir tmp/data"},
+                    "reason": "write",
+                }
+            ],
+            session,
+            console,
         )
         assert decisions["tc1"]["action"] == "skip"
         assert decisions["tc1"]["message"] == "I already created the folder manually"

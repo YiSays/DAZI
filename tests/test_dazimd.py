@@ -1,20 +1,16 @@
 """Tests for dazi/dazimd.py — DAZI.md discovery, includes, and merging."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from dazi.dazimd import (
-    DaziMdFile,
-    PRIORITY_GLOBAL,
-    PRIORITY_LOCAL,
     PRIORITY_PROJECT,
+    DaziMdFile,
     discover_dazimd_files,
     merge_dazimd_content,
     resolve_includes,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # discover_dazimd_files
@@ -62,7 +58,7 @@ class TestResolveIncludes:
     def test_relative_path_include(self, tmp_path: Path):
         included = tmp_path / "extra.md"
         included.write_text("Included content")
-        content = f"@include extra.md"
+        content = "@include extra.md"
         result = resolve_includes(content, tmp_path)
         assert "Included content" in result
 
@@ -106,7 +102,9 @@ class TestMergeDazimdContent:
 
     def test_multiple_dedup(self):
         f1 = DaziMdFile(path=Path("/tmp/DAZI.md"), priority=300, content="Common line\nUnique A")
-        f2 = DaziMdFile(path=Path("/tmp/DAZI.local.md"), priority=400, content="Common line\nUnique B")
+        f2 = DaziMdFile(
+            path=Path("/tmp/DAZI.local.md"), priority=400, content="Common line\nUnique B"
+        )
         result = merge_dazimd_content([f2, f1])
         # "Common line" should appear only once
         assert result.count("Common line") == 1

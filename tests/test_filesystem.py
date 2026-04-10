@@ -1,4 +1,5 @@
-"""Tests for dazi/filesystem.py — file_reader, file_writer, calculator, shell_exec, plan_writer tools."""
+"""Tests for dazi/filesystem.py — file_reader, file_writer, calculator, shell_exec, plan_writer
+tools."""
 
 from __future__ import annotations
 
@@ -10,12 +11,8 @@ from dazi.filesystem import (
     calculator_tool,
     file_reader_tool,
     file_writer_tool,
-    plan_writer_tool,
     shell_exec_tool,
-    PLAN_FILE,
-    PLAN_DIR,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # file_reader
@@ -35,9 +32,7 @@ class TestFileReader:
         assert "2" in result
 
     def test_read_nonexistent_file_returns_error(self, tmp_path: Path):
-        result = file_reader_tool.invoke(
-            {"file_path": str(tmp_path / "nope.txt")}
-        )
+        result = file_reader_tool.invoke({"file_path": str(tmp_path / "nope.txt")})
         assert "Error" in result
         assert "not found" in result.lower() or "Error" in result
 
@@ -45,9 +40,7 @@ class TestFileReader:
         lines = [f"line {i}" for i in range(20)]
         f = tmp_path / "many.txt"
         f.write_text("\n".join(lines))
-        result = file_reader_tool.invoke(
-            {"file_path": str(f), "offset": 5, "limit": 3}
-        )
+        result = file_reader_tool.invoke({"file_path": str(f), "offset": 5, "limit": 3})
         assert "line 5" in result
         assert "line 6" in result
         assert "line 7" in result
@@ -55,6 +48,7 @@ class TestFileReader:
 
     def test_rejects_relative_path(self):
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             file_reader_tool.invoke({"file_path": "relative/path.txt"})
 
@@ -67,30 +61,36 @@ class TestFileReader:
 class TestFileWriter:
     def test_creates_file(self, tmp_path: Path):
         target = tmp_path / "new.txt"
-        result = file_writer_tool.invoke({
-            "file_path": str(target),
-            "content": "hello world",
-        })
+        result = file_writer_tool.invoke(
+            {
+                "file_path": str(target),
+                "content": "hello world",
+            }
+        )
         assert target.exists()
         assert target.read_text() == "hello world"
         assert "Successfully wrote" in result
 
     def test_creates_parent_directories(self, tmp_path: Path):
         target = tmp_path / "a" / "b" / "c" / "file.txt"
-        result = file_writer_tool.invoke({
-            "file_path": str(target),
-            "content": "nested",
-        })
+        file_writer_tool.invoke(
+            {
+                "file_path": str(target),
+                "content": "nested",
+            }
+        )
         assert target.exists()
         assert target.read_text() == "nested"
 
     def test_overwrites_existing_file(self, tmp_path: Path):
         target = tmp_path / "overwrite.txt"
         target.write_text("old content")
-        file_writer_tool.invoke({
-            "file_path": str(target),
-            "content": "new content",
-        })
+        file_writer_tool.invoke(
+            {
+                "file_path": str(target),
+                "content": "new content",
+            }
+        )
         assert target.read_text() == "new content"
 
 
@@ -141,6 +141,7 @@ class TestPlanWriter:
         monkeypatch.setattr("dazi.filesystem.PLAN_FILE", plan_file)
 
         from dazi.filesystem import plan_writer
+
         result = plan_writer("My test plan")
         assert plan_file.exists()
         assert plan_file.read_text() == "My test plan"

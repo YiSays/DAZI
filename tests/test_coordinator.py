@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 from dazi.coordinator import AutonomousConfig, AutonomousTeammate
 from dazi.mailbox import Mailbox
 from dazi.task_store import Task, TaskStatus, TaskStore
-
 
 # ─────────────────────────────────────────────────────────
 # AutonomousConfig defaults
@@ -188,7 +187,7 @@ class TestIdleNotification:
             handle.abort_signal.set()
         try:
             await asyncio.wait_for(atask, timeout=2.0)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
+        except (TimeoutError, asyncio.CancelledError):
             atask.cancel()
             try:
                 await atask

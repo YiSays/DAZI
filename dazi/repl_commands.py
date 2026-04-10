@@ -9,28 +9,28 @@ All built-in slash commands are handled here. The REPL loop calls
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from rich.console import Console
-
-from dazi.theme import BORDER
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+import dazi.graph as _graph_mod
+import dazi.repl_teams as _teams
 from dazi._singletons import (
-    background_manager,
-    cost_tracker,
-    memory_store,
-    mcp_manager,
-    proactive_manager,
+    PLAN_FILE,
     autonomous_teammate,
+    cost_tracker,
+    mcp_manager,
+    memory_store,
+    proactive_manager,
     settings_manager,
     skill_registry,
     task_store,
     team_manager,
     worktree_manager,
-    PLAN_FILE,
 )
 from dazi.compact import manual_compact
 from dazi.dazimd import DaziMdFile
@@ -46,6 +46,12 @@ from dazi.llm import _get_llm, _get_model_name, _update_proactive_prompt
 from dazi.memory import MemoryEntry
 from dazi.permissions import parse_rule
 from dazi.proactive import ProactiveSource
+from dazi.registry import (
+    EXECUTE_MODE_META,
+    EXECUTE_MODE_TOOLS,
+    PLAN_MODE_META,
+    PLAN_MODE_TOOLS,
+)
 from dazi.repl_completer import print_help
 from dazi.repl_display import (
     add_demo_hook,
@@ -62,21 +68,10 @@ from dazi.repl_display import (
     show_task_detail,
     show_token_info,
 )
-from dazi.registry import (
-    EXECUTE_MODE_META,
-    EXECUTE_MODE_TOOLS,
-    PLAN_MODE_META,
-    PLAN_MODE_TOOLS,
-)
-from dazi.skills import skill_tool
-from dazi.task_store import TaskStore
+from dazi.theme import BORDER
 from dazi.tokenizer import count_messages_tokens
 
-import dazi.graph as _graph_mod
-import dazi.repl_teams as _teams
-
 if TYPE_CHECKING:
-    from langchain_core.messages import BaseMessage
     from prompt_toolkit import PromptSession
 
 
@@ -173,6 +168,14 @@ async def handle_command(
         await connect_mcp_servers()
         return "continue"
 
+    # ── /onboard ──
+    if cmd == "/onboard":
+        from dazi.onboard import run_onboarding
+
+        run_onboarding(console)
+        settings_manager.reload()
+        return "continue"
+
     # ── /mcp ──
     if cmd == "/mcp":
         show_mcp_servers_table()
@@ -232,7 +235,8 @@ async def handle_command(
         console.print(
             Panel(
                 "[bold blue]PLAN MODE[/bold blue]\n"
-                "Read-only tools + plan_writer + memory tools + task tools + background tools enabled.\n"
+                "Read-only tools + plan_writer + memory tools "
+                "+ task tools + background tools enabled.\n"
                 "Type /go to exit plan mode.",
                 border_style=BORDER["primary"],
             )
@@ -248,7 +252,11 @@ async def handle_command(
         if PLAN_FILE.exists():
             plan_content = PLAN_FILE.read_text(encoding="utf-8")
             console.print(
-                Panel(Markdown(plan_content), title="[bold green]Plan[/bold green]", border_style=BORDER["success"])
+                Panel(
+                    Markdown(plan_content),
+                    title="[bold green]Plan[/bold green]",
+                    border_style=BORDER["success"],
+                )
             )
         console.print("[bold green]EXECUTE MODE[/bold green] -- all tools enabled.")
         return "continue"
@@ -259,7 +267,11 @@ async def handle_command(
             console.print("[dim]No plan file found.[/dim]")
             return "continue"
         console.print(
-            Panel(Markdown(PLAN_FILE.read_text(encoding="utf-8")), title="Plan File", border_style=BORDER["primary"])
+            Panel(
+                Markdown(PLAN_FILE.read_text(encoding="utf-8")),
+                title="Plan File",
+                border_style=BORDER["primary"],
+            )
         )
         return "continue"
 
@@ -278,7 +290,9 @@ async def handle_command(
             meta = meta_dict.get(tool.name)
             if meta:
                 tag = safety_tags.get(meta.safety.value, meta.safety.value)
-                concurrent = "[dim]parallel[/dim]" if meta.is_concurrency_safe else "[dim]serial[/dim]"
+                concurrent = (
+                    "[dim]parallel[/dim]" if meta.is_concurrency_safe else "[dim]serial[/dim]"
+                )
                 console.print(f"  * {meta.name} -- {meta.description} ({tag}, {concurrent})")
         return "continue"
 
@@ -293,7 +307,9 @@ async def handle_command(
         try:
             rule = parse_rule(f"allow {rule_str}", "cli")
             permission_rules.append(rule)
-            console.print(f"[green]Added rule: ALLOW {rule.tool_name or '*'} {rule.pattern or ''}[/green]")
+            console.print(
+                f"[green]Added rule: ALLOW {rule.tool_name or '*'} {rule.pattern or ''}[/green]"
+            )
         except ValueError as e:
             console.print(f"[red]Invalid rule: {e}[/red]")
         return "continue"
@@ -304,7 +320,9 @@ async def handle_command(
         try:
             rule = parse_rule(f"deny {rule_str}", "cli")
             permission_rules.append(rule)
-            console.print(f"[red]Added rule: DENY {rule.tool_name or '*'} {rule.pattern or ''}[/red]")
+            console.print(
+                f"[red]Added rule: DENY {rule.tool_name or '*'} {rule.pattern or ''}[/red]"
+            )
         except ValueError as e:
             console.print(f"[red]Invalid rule: {e}[/red]")
         return "continue"
@@ -576,10 +594,15 @@ async def handle_command(
             action = action_flag[2:] if action_flag in ("--keep", "--remove") else "keep"
             if action == "keep":
                 branch = worktree_manager.keep(slug)
-                console.print(f"[green]Kept worktree:[/green] branch '{branch}' preserved at {wt.path}")
+                console.print(
+                    f"[green]Kept worktree:[/green] branch '{branch}' preserved at {wt.path}"
+                )
             elif action == "remove":
                 if worktree_manager.has_uncommitted_changes(slug):
-                    console.print("[yellow]Worktree has uncommitted changes. Use --remove with --force or keep instead.[/yellow]")
+                    console.print(
+                        "[yellow]Worktree has uncommitted changes. "
+                        "Use --remove with --force or keep instead.[/yellow]"
+                    )
                     worktree_manager.remove(slug, force=False)
                 else:
                     removed = worktree_manager.remove(slug, force=True)
@@ -598,7 +621,11 @@ async def handle_command(
                 table.add_column("Path", style="dim")
                 table.add_column("Dirty")
                 for wt in active_worktrees:
-                    dirty = "[yellow]yes[/yellow]" if worktree_manager.has_uncommitted_changes(wt.id) else "[green]no[/green]"
+                    dirty = (
+                        "[yellow]yes[/yellow]"
+                        if worktree_manager.has_uncommitted_changes(wt.id)
+                        else "[green]no[/green]"
+                    )
                     table.add_row(wt.agent_name, wt.branch, str(wt.path), dirty)
                 console.print(table)
         return "continue"
@@ -636,9 +663,30 @@ async def handle_command(
             await _teams.send_shutdown_request(agent)
         return "continue"
 
+    # ── Dynamic MCP server slash commands ──
+    if cmd.startswith("/"):
+        parts = cmd.split(None, 1)
+        server_name = parts[0][1:]  # strip leading /
+        server = mcp_manager.get_server(server_name)
+        if server and server.status.value == "connected":
+            tools = server.tools
+            if len(tools) == 1:
+                try:
+                    result = await mcp_manager.call_tool(tools[0].qualified_name, {})
+                    console.print(Panel(result, title=server_name, border_style=BORDER["primary"]))
+                except Exception as e:
+                    console.print(f"[red]Error: {e}[/red]")
+                return "continue"
+            elif len(tools) > 1:
+                console.print(f"[bold]{server_name}[/bold] has {len(tools)} tools:")
+                for t in tools:
+                    console.print(f"  /{server_name} {t.name} — {t.description[:80]}")
+                return "continue"
+
     # ── Slash command expansion (skill invocation) ──
     if cmd.startswith("/"):
         from langchain_core.messages import HumanMessage, SystemMessage
+
         from dazi.graph import run_graph_turn
 
         parts = cmd.split(None, 1)

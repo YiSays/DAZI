@@ -55,7 +55,6 @@ class TestPlanModeSubset:
 class TestPlanToolSafety:
     def test_plan_tools_safety_constraints(self):
         from dazi.registry import PLAN_MODE_META
-        from dazi.base import ToolSafety
 
         # Plan mode excludes the most dangerous tools (file_writer, delete_team, etc.)
         # but may include some WRITE tools (run_background) for read-only exploration use
@@ -73,6 +72,4 @@ class TestToolNamesMatchKeys:
         from dazi.registry import ALL_TOOL_META
 
         for key, meta in ALL_TOOL_META.items():
-            assert meta.name == key, (
-                f"Key '{key}' does not match meta.name '{meta.name}'"
-            )
+            assert meta.name == key, f"Key '{key}' does not match meta.name '{meta.name}'"

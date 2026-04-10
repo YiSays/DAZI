@@ -6,8 +6,9 @@ import asyncio
 import random
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 
@@ -15,6 +16,7 @@ T = TypeVar("T")
 # ─────────────────────────────────────────────────────────
 # ABORT SIGNAL
 # ─────────────────────────────────────────────────────────
+
 
 class AbortSignal:
     """Cooperative cancellation signal.
@@ -48,12 +50,14 @@ class AbortSignal:
 
 class AbortError(Exception):
     """Raised when an operation is cancelled via AbortSignal."""
+
     pass
 
 
 # ─────────────────────────────────────────────────────────
 # CIRCUIT BREAKER
 # ─────────────────────────────────────────────────────────
+
 
 @dataclass
 class CircuitBreaker:
@@ -64,6 +68,7 @@ class CircuitBreaker:
       OPEN:     Failing — all calls immediately rejected
       HALF_OPEN: Probing — allow one call to test if service recovered
     """
+
     failure_threshold: int = 3
     cooldown_seconds: float = 30.0
     _failure_count: int = field(default=0, init=False, repr=False)
@@ -109,9 +114,11 @@ class CircuitBreaker:
 # RETRY POLICY
 # ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class RetryPolicy:
     """Configuration for retry behavior."""
+
     max_retries: int = 3
     base_delay: float = 1.0
     max_delay: float = 30.0
@@ -131,7 +138,7 @@ def _calculate_delay(attempt: int, policy: RetryPolicy) -> float:
       delay = min(base_delay * 2^attempt, max_delay)
       + random jitter (0 to base_delay)
     """
-    delay = min(policy.base_delay * (2 ** attempt), policy.max_delay)
+    delay = min(policy.base_delay * (2**attempt), policy.max_delay)
     if policy.jitter:
         delay += random.uniform(0, policy.base_delay)
     return delay
@@ -231,23 +238,26 @@ async def with_retry(
             if attempt < policy.max_retries and _is_retryable(e, policy):
                 delay = _calculate_delay(attempt, policy)
                 # Log retry (in production, this would use proper logging)
-                print(f"  [retry] Attempt {attempt + 1}/{policy.max_retries} failed: {e}. Retrying in {delay:.1f}s...")
+                print(
+                    f"  [retry] Attempt {attempt + 1}/{policy.max_retries} "
+                    f"failed: {e}. Retrying in {delay:.1f}s..."
+                )
                 await asyncio.sleep(delay)
                 continue
 
             # Not retryable or out of retries
-            raise MaxRetriesError(
-                f"Failed after {attempt + 1} attempts: {e}"
-            ) from e
+            raise MaxRetriesError(f"Failed after {attempt + 1} attempts: {e}") from e
 
     raise MaxRetriesError(f"Failed after {policy.max_retries} attempts: {last_error}")
 
 
 class CircuitOpenError(Exception):
     """Raised when circuit breaker rejects a request."""
+
     pass
 
 
 class MaxRetriesError(Exception):
     """Raised when all retry attempts are exhausted."""
+
     pass

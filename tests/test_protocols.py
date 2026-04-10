@@ -1,7 +1,7 @@
 """Tests for dazi.protocols — protocol message factories."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from dazi.protocols import (
     _new_id,
@@ -91,9 +91,7 @@ class TestShutdownProtocol:
 
 class TestPermissionProtocol:
     def test_request_fields(self):
-        msg = create_permission_request(
-            "worker", "file_writer", {"path": "/tmp/test.py"}
-        )
+        msg = create_permission_request("worker", "file_writer", {"path": "/tmp/test.py"})
         assert msg.msg_type == "permission_request"
         assert msg.to_agent == TEAM_LEAD_NAME
         assert msg.metadata["tool_name"] == "file_writer"

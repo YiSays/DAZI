@@ -13,7 +13,6 @@ from dazi.background import (
     BackgroundTaskStatus,
 )
 
-
 # ─────────────────────────────────────────────────────────
 # BackgroundTaskStatus enum
 # ─────────────────────────────────────────────────────────
@@ -58,8 +57,12 @@ class TestBackgroundTask:
         assert BackgroundTask(id="", command="", status=BackgroundTaskStatus.COMPLETED).is_terminal
         assert BackgroundTask(id="", command="", status=BackgroundTaskStatus.FAILED).is_terminal
         assert BackgroundTask(id="", command="", status=BackgroundTaskStatus.KILLED).is_terminal
-        assert not BackgroundTask(id="", command="", status=BackgroundTaskStatus.RUNNING).is_terminal
-        assert not BackgroundTask(id="", command="", status=BackgroundTaskStatus.PENDING).is_terminal
+        assert not BackgroundTask(
+            id="", command="", status=BackgroundTaskStatus.RUNNING
+        ).is_terminal
+        assert not BackgroundTask(
+            id="", command="", status=BackgroundTaskStatus.PENDING
+        ).is_terminal
 
 
 # ─────────────────────────────────────────────────────────

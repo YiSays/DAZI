@@ -8,7 +8,6 @@ import pytest
 
 from dazi.mailbox import Mailbox, Message
 
-
 # ─────────────────────────────────────────────────────────
 # Message serialization
 # ─────────────────────────────────────────────────────────
@@ -109,9 +108,7 @@ class TestMailboxSendReceive:
             text="Hello all",
             timestamp="2025-01-01T00:00:00Z",
         )
-        recipients = await mailbox.send(
-            "team1", msg, team_members=["alice", "bob", "carol"]
-        )
+        recipients = await mailbox.send("team1", msg, team_members=["alice", "bob", "carol"])
         assert "bob" in recipients
         assert "carol" in recipients
         assert "alice" not in recipients  # sender excluded
@@ -177,12 +174,18 @@ class TestMailboxMarkReadPurge:
     @pytest.mark.asyncio
     async def test_mark_read_specific_ids(self, mailbox: Mailbox):
         msg1 = Message(
-            id="r1", from_agent="a", to_agent="b",
-            text="1", timestamp="2025-01-01T00:00:00Z",
+            id="r1",
+            from_agent="a",
+            to_agent="b",
+            text="1",
+            timestamp="2025-01-01T00:00:00Z",
         )
         msg2 = Message(
-            id="r2", from_agent="a", to_agent="b",
-            text="2", timestamp="2025-01-01T00:00:00Z",
+            id="r2",
+            from_agent="a",
+            to_agent="b",
+            text="2",
+            timestamp="2025-01-01T00:00:00Z",
         )
         await mailbox.send("team1", msg1)
         await mailbox.send("team1", msg2)
@@ -193,8 +196,11 @@ class TestMailboxMarkReadPurge:
     async def test_mark_read_all(self, mailbox: Mailbox):
         for i in range(3):
             msg = Message(
-                id=f"a{i}", from_agent="x", to_agent="y",
-                text=f"msg{i}", timestamp="2025-01-01T00:00:00Z",
+                id=f"a{i}",
+                from_agent="x",
+                to_agent="y",
+                text=f"msg{i}",
+                timestamp="2025-01-01T00:00:00Z",
             )
             await mailbox.send("team1", msg)
         count = await mailbox.mark_read("team1", "y")
@@ -203,8 +209,11 @@ class TestMailboxMarkReadPurge:
     @pytest.mark.asyncio
     async def test_purge_with_messages(self, mailbox: Mailbox):
         msg = Message(
-            id="p1", from_agent="a", to_agent="b",
-            text="bye", timestamp="2025-01-01T00:00:00Z",
+            id="p1",
+            from_agent="a",
+            to_agent="b",
+            text="bye",
+            timestamp="2025-01-01T00:00:00Z",
         )
         await mailbox.send("team1", msg)
         count = await mailbox.purge("team1", "b")

@@ -5,14 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-from prompt_toolkit.completion import Completer, Completion, CompleteEvent
-from prompt_toolkit.shortcuts.prompt import CompleteStyle
+from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.document import Document
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.shortcuts.prompt import CompleteStyle
 from rich.console import Console
 from rich.table import Table
-
 
 # ─────────────────────────────────────────────────────────
 # COMMAND REGISTRY
@@ -23,10 +22,10 @@ from rich.table import Table
 class CommandEntry:
     """Metadata for a slash command."""
 
-    name: str              # e.g. "/mcp"
-    usage: str             # e.g. "/mcp [last]"
-    description: str       # one-line help
-    category: str          # group heading
+    name: str  # e.g. "/mcp"
+    usage: str  # e.g. "/mcp [last]"
+    description: str  # one-line help
+    category: str  # group heading
     subcommands: list[CommandEntry] = field(default_factory=list)
 
 
@@ -37,73 +36,86 @@ COMMAND_REGISTRY: list[CommandEntry] = [
     CommandEntry("/cost", "/cost [last]", "Show session cost", "Core"),
     CommandEntry("/settings", "/settings", "Show current settings", "Core"),
     CommandEntry("/reload", "/reload", "Reload settings, skills, and MCP servers", "Core"),
+    CommandEntry("/onboard", "/onboard", "Re-run setup wizard", "Core"),
     CommandEntry("/help", "/help", "Show this help message", "Core"),
-
     # Mode
     CommandEntry("/plan", "/plan", "Switch to plan mode (read-only tools)", "Mode"),
     CommandEntry("/go", "/go", "Switch to execute mode (all tools)", "Mode"),
     CommandEntry("/show", "/show", "Display the plan file", "Mode"),
     CommandEntry("/tools", "/tools", "List available tools for current mode", "Mode"),
-
     # Permissions
     CommandEntry("/rules", "/rules", "List permission rules", "Permissions"),
     CommandEntry("/allow", "/allow <rule>", "Add an allow rule", "Permissions"),
     CommandEntry("/deny", "/deny <rule>", "Add a deny rule", "Permissions"),
-
     # Hooks
     CommandEntry("/hooks", "/hooks", "List registered hooks", "Hooks"),
     CommandEntry("/hook", "/hook", "Add a demo logging hook", "Hooks"),
-
     # Memory
     CommandEntry("/remember", "/remember <content>", "Store a memory entry", "Memory"),
     CommandEntry("/forget", "/forget <id>", "Delete a memory entry", "Memory"),
     CommandEntry("/memories", "/memories", "List all memories", "Memory"),
     CommandEntry("/reindex", "/reindex", "Rebuild memory index", "Memory"),
-
     # Tasks
     CommandEntry("/tasks", "/tasks", "List tasks on the board", "Tasks"),
     CommandEntry("/task", "/task <id>", "Show task detail", "Tasks"),
     CommandEntry("/bg", "/bg [task_id]", "List or inspect background tasks", "Tasks"),
-
     # MCP
-    CommandEntry("/mcp", "/mcp", "List MCP servers", "MCP", subcommands=[
-        CommandEntry("/mcp connect", "/mcp connect <name>", "Connect to an MCP server", "MCP"),
-        CommandEntry("/mcp disconnect", "/mcp disconnect <name>", "Disconnect an MCP server", "MCP"),
-    ]),
-
+    CommandEntry(
+        "/mcp",
+        "/mcp",
+        "List MCP servers",
+        "MCP",
+        subcommands=[
+            CommandEntry("/mcp connect", "/mcp connect <name>", "Connect to an MCP server", "MCP"),
+            CommandEntry(
+                "/mcp disconnect", "/mcp disconnect <name>", "Disconnect an MCP server", "MCP"
+            ),
+        ],
+    ),
     # Skills
     CommandEntry("/skills", "/skills", "List all loaded skills", "Skills"),
     CommandEntry("/skill", "/skill <name>", "Show skill detail", "Skills"),
-
     # Teams
     CommandEntry("/teams", "/teams", "List all teams", "Teams"),
-    CommandEntry("/team", "/team <name>", "Activate or view a team", "Teams", subcommands=[
-        CommandEntry("/team create", "/team create <name>", "Create a new team", "Teams"),
-        CommandEntry("/team delete", "/team delete <name>", "Delete a team", "Teams"),
-        CommandEntry("/team leave", "/team leave", "Leave active team", "Teams"),
-    ]),
-
+    CommandEntry(
+        "/team",
+        "/team <name>",
+        "Activate or view a team",
+        "Teams",
+        subcommands=[
+            CommandEntry("/team create", "/team create <name>", "Create a new team", "Teams"),
+            CommandEntry("/team delete", "/team delete <name>", "Delete a team", "Teams"),
+            CommandEntry("/team leave", "/team leave", "Leave active team", "Teams"),
+        ],
+    ),
     # Communications
     CommandEntry("/inbox", "/inbox [agent]", "Check inbox messages", "Communications"),
     CommandEntry("/send", "/send <agent> <msg>", "Send message to a teammate", "Communications"),
     CommandEntry("/broadcast", "/broadcast <msg>", "Broadcast to all teammates", "Communications"),
-    CommandEntry("/shutdown", "/shutdown <agent>", "Send shutdown request to a teammate", "Communications"),
-
+    CommandEntry(
+        "/shutdown", "/shutdown <agent>", "Send shutdown request to a teammate", "Communications"
+    ),
     # Proactive
     CommandEntry("/proactive", "/proactive [on|off]", "Show or toggle proactive mode", "Proactive"),
     CommandEntry("/autonomous", "/autonomous", "List autonomous teammates", "Proactive"),
-
     # Worktree
-    CommandEntry("/worktree", "/worktree", "List active worktrees", "Worktree", subcommands=[
-        CommandEntry("/worktree create", "/worktree create <name>", "Create a new worktree", "Worktree"),
-        CommandEntry(
-            "/worktree finish",
-            "/worktree finish <name> [--keep|--remove]",
-            "Finish a worktree",
-            "Worktree",
-        ),
-    ]),
-
+    CommandEntry(
+        "/worktree",
+        "/worktree",
+        "List active worktrees",
+        "Worktree",
+        subcommands=[
+            CommandEntry(
+                "/worktree create", "/worktree create <name>", "Create a new worktree", "Worktree"
+            ),
+            CommandEntry(
+                "/worktree finish",
+                "/worktree finish <name> [--keep|--remove]",
+                "Finish a worktree",
+                "Worktree",
+            ),
+        ],
+    ),
     # Context
     CommandEntry("/dazimd", "/dazimd", "Show loaded DAZI.md files", "Context"),
     CommandEntry("/compact", "/compact", "Manually compact conversation tokens", "Context"),
@@ -119,12 +131,36 @@ def _build_skill_commands() -> list[CommandEntry]:
     for skill in skill_registry.list_user_invocable():
         arg_hint = f" {skill.argument_hint}" if skill.argument_hint else ""
         desc = skill.description or f"Invoke skill: {skill.name}"
-        entries.append(CommandEntry(
-            name=f"/{skill.name}",
-            usage=f"/{skill.name}{arg_hint}",
-            description=desc,
-            category="Skills (custom)",
-        ))
+        entries.append(
+            CommandEntry(
+                name=f"/{skill.name}",
+                usage=f"/{skill.name}{arg_hint}",
+                description=desc,
+                category="Skills (custom)",
+            )
+        )
+    return entries
+
+
+def _build_mcp_commands() -> list[CommandEntry]:
+    """Build CommandEntry list for connected MCP servers."""
+    from dazi._singletons import mcp_manager
+
+    entries: list[CommandEntry] = []
+    for server in mcp_manager.list_servers():
+        if server["status"] != "connected":
+            continue
+        name = server["name"]
+        tool_count = server["tool_count"]
+        desc = f"MCP server ({tool_count} tool{'s' if tool_count != 1 else ''})"
+        entries.append(
+            CommandEntry(
+                name=f"/{name}",
+                usage=f"/{name}",
+                description=desc,
+                category="MCP Servers",
+            )
+        )
     return entries
 
 
@@ -147,9 +183,7 @@ class SlashCommandCompleter(Completer):
             if entry.subcommands:
                 self._subcommand_map[entry.name] = entry.subcommands
 
-    def get_completions(
-        self, document: Document, complete_event: CompleteEvent
-    ):
+    def get_completions(self, document: Document, complete_event: CompleteEvent):
         text_before = document.text_before_cursor
         if not text_before or not text_before.startswith("/"):
             return
@@ -203,6 +237,14 @@ class SlashCommandCompleter(Completer):
                     display=entry.name,
                     display_meta=f"[{entry.category}] {entry.description}",
                 )
+        for entry in _build_mcp_commands():
+            if entry.name.startswith(partial):
+                yield Completion(
+                    text=entry.name,
+                    start_position=-len(partial),
+                    display=entry.name,
+                    display_meta=f"[{entry.category}] {entry.description}",
+                )
 
 
 # ─────────────────────────────────────────────────────────
@@ -210,15 +252,27 @@ class SlashCommandCompleter(Completer):
 # ─────────────────────────────────────────────────────────
 
 _CATEGORY_ORDER = [
-    "Core", "Mode", "Permissions", "Hooks", "Memory",
-    "Tasks", "MCP", "Skills", "Skills (custom)",
-    "Teams", "Communications", "Proactive", "Worktree", "Context",
+    "Core",
+    "Mode",
+    "Permissions",
+    "Hooks",
+    "Memory",
+    "Tasks",
+    "MCP",
+    "MCP Servers",
+    "Skills",
+    "Skills (custom)",
+    "Teams",
+    "Communications",
+    "Proactive",
+    "Worktree",
+    "Context",
 ]
 
 
 def print_help(console: Console) -> None:
     """Display all slash commands grouped by category in Rich tables."""
-    all_commands = list(COMMAND_REGISTRY) + _build_skill_commands()
+    all_commands = list(COMMAND_REGISTRY) + _build_skill_commands() + _build_mcp_commands()
 
     categories: dict[str, list[CommandEntry]] = {}
     for cmd in all_commands:
@@ -260,7 +314,7 @@ def print_help(console: Console) -> None:
 
 def _build_repl_key_bindings(state: dict) -> KeyBindings:
     """Custom key bindings for the Dazi REPL."""
-    from dazi.graph import EXECUTE_MODE, PLAN_MODE
+    from dazi.graph import EXECUTE_MODE
 
     kb = KeyBindings()
 

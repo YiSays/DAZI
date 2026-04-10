@@ -11,15 +11,20 @@ KEY CONCEPTS:
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
+from textwrap import dedent
+from typing import Any
+
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
 from dazi.base import DaziTool, ToolSafety
 from dazi.mailbox import Mailbox
 from dazi.protocols import create_idle_notification
 from dazi.task_store import Task, TaskStatus, TaskStore
-from dazi.teammate import TeammateHandle, TeammateRunner, TeammateStatus
-
+from dazi.teammate import TeammateHandle, TeammateRunner
 
 # ─────────────────────────────────────────────────────────
 # AUTONOMOUS CONFIGURATION
@@ -239,6 +244,7 @@ class AutonomousTeammate(TeammateRunner):
 
             # No work found — track idle time
             import time
+
             now = time.monotonic()
 
             if idle_since is None:
@@ -285,6 +291,7 @@ class AutonomousTeammate(TeammateRunner):
         Returns:
             The asyncio.Task running the autonomous cycle.
         """
+
         async def _autonomous_run(handle: TeammateHandle) -> None:
             await self.run_autonomous_cycle(
                 team_name=team_name,
@@ -329,12 +336,6 @@ async def _default_run_func(task: Task) -> str:
 # DELEGATE TASK TOOL
 # ─────────────────────────────────────────────────────────
 
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
-from textwrap import dedent
-
-
 SUB_AGENT_PROMPT = """\
 You are a sub-agent of Dazi. You have been delegated a specific task.
 Complete the task using the available tools. Be thorough and concise.
@@ -346,13 +347,16 @@ Do NOT ask for user input — make decisions autonomously within your scope."""
 class DelegateTaskInput(BaseModel):
     task: str = Field(description="The task for the sub-agent to complete")
     max_turns: int = Field(default=5, description="Maximum number of LLM turns")
-    allowed_tools: list[str] | None = Field(default=None, description="Optional list of tool names the sub-agent can use. None = all parent tools.")
+    allowed_tools: list[str] | None = Field(
+        default=None,
+        description="Optional list of tool names the sub-agent can use. None = all parent tools.",
+    )
 
 
 def delegate_task(task: str, max_turns: int = 5, allowed_tools: list[str] | None = None) -> str:
     """Delegate a task to a sub-agent with fresh context."""
+    from dazi.filesystem import calculator_tool, file_reader_tool, shell_exec_tool
     from dazi.llm import create_llm
-    from dazi.filesystem import file_reader_tool, calculator_tool, shell_exec_tool
 
     all_tools = [file_reader_tool, calculator_tool, shell_exec_tool]
     all_tool_names = {t.name for t in all_tools}
@@ -418,18 +422,26 @@ delegate_task_tool = StructuredTool.from_function(
         The sub-agent returns a summary when done.""").strip(),
     args_schema=DelegateTaskInput,
 )
-delegate_task_meta = DaziTool(name="delegate_task", description="Delegate a task to a sub-agent.", safety=ToolSafety.SAFE)
+delegate_task_meta = DaziTool(
+    name="delegate_task", description="Delegate a task to a sub-agent.", safety=ToolSafety.SAFE
+)
 
 
 # ─────────────────────────────────────────────────────────
 # SPAWN AGENT TOOL (autonomous version — final)
 # ─────────────────────────────────────────────────────────
 
+
 class AgentSpawnInput(BaseModel):
     team_name: str = Field(description="Name of the team to spawn the agent into")
     member_name: str = Field(description="Name for the new teammate (e.g., 'frontend', 'backend')")
-    agent_type: str = Field(default="general-purpose", description="Type of agent: 'general-purpose', 'explore', or 'plan'")
-    initial_task: str = Field(default="", description="Optional initial task description for the teammate")
+    agent_type: str = Field(
+        default="general-purpose",
+        description="Type of agent: 'general-purpose', 'explore', or 'plan'",
+    )
+    initial_task: str = Field(
+        default="", description="Optional initial task description for the teammate"
+    )
 
 
 async def spawn_agent_func(
@@ -467,7 +479,12 @@ spawn_agent_tool = StructuredTool.from_function(
     func=lambda **kwargs: "",
     coroutine=spawn_agent_func,
     name="spawn_agent",
-    description="Spawn an autonomous teammate that will scan the task board, claim available work, and execute it. Requires a team to exist.",
+    description=(
+        "Spawn an autonomous teammate that will scan the task board, "
+        "claim available work, and execute it. Requires a team to exist."
+    ),
     args_schema=AgentSpawnInput,
 )
-spawn_agent_meta = DaziTool(name="spawn_agent", description="Spawn an autonomous teammate.", safety=ToolSafety.WRITE)
+spawn_agent_meta = DaziTool(
+    name="spawn_agent", description="Spawn an autonomous teammate.", safety=ToolSafety.WRITE
+)

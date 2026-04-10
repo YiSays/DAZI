@@ -13,12 +13,15 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
+from textwrap import dedent
 from typing import Any
 
-from dazi.base import DaziTool, ToolSafety
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field, field_validator
 
+from dazi.base import DaziTool, ToolSafety
 
 # ─────────────────────────────────────────────────────────
 # CONSTANTS
@@ -33,8 +36,9 @@ DEFAULT_LIST_ID = "default"
 # Note: "deleted" is NOT a real status — it triggers file removal on update
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     """Task lifecycle states."""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -51,6 +55,7 @@ class Task:
 
     Storage: one JSON file per task at <tasks_dir>/<list_id>/<task_id>.json
     """
+
     id: int
     subject: str
     description: str
@@ -177,7 +182,12 @@ class TaskStore:
             return None
 
         allowed_fields = {
-            "subject", "description", "active_form", "status", "owner", "metadata",
+            "subject",
+            "description",
+            "active_form",
+            "status",
+            "owner",
+            "metadata",
         }
         for key, value in kwargs.items():
             if key in allowed_fields:
@@ -236,7 +246,9 @@ class TaskStore:
 
         return task, blocked_task
 
-    def add_blocked_by(self, task_id: int, blocking_task_id: int) -> tuple[Task | None, Task | None]:
+    def add_blocked_by(
+        self, task_id: int, blocking_task_id: int
+    ) -> tuple[Task | None, Task | None]:
         """Mark task_id as blocked by blocking_task_id (bidirectional update).
 
         Adds blocking_task_id to task.blocked_by and task_id to blocking_task.blocks.
@@ -288,10 +300,6 @@ class TaskStore:
 # TASK TOOLS
 # ─────────────────────────────────────────────────────────
 
-from textwrap import dedent
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field, field_validator
-
 
 class TaskCreateInput(BaseModel):
     subject: str = Field(description="A brief title for the task")
@@ -306,11 +314,15 @@ class TaskCreateInput(BaseModel):
     )
 
 
-def task_create(subject: str, description: str, activeForm: str = "", metadata: dict[str, object] | None = None) -> str:
+def task_create(
+    subject: str, description: str, activeForm: str = "", metadata: dict[str, object] | None = None
+) -> str:
     """Create a new task on the task board."""
     from dazi._singletons import task_store
 
-    task = task_store.create(subject=subject, description=description, active_form=activeForm, metadata=metadata or {})
+    task = task_store.create(
+        subject=subject, description=description, active_form=activeForm, metadata=metadata or {}
+    )
     return (
         f"Task created: #{task.id}\n"
         f"Subject: {task.subject}\n"
@@ -325,19 +337,33 @@ task_create_tool = StructuredTool.from_function(
     description="Create a new task on the task board. Tasks start in 'pending' status.",
     args_schema=TaskCreateInput,
 )
-task_create_meta = DaziTool(name="task_create", description="Create a new task.", safety=ToolSafety.SAFE)
+task_create_meta = DaziTool(
+    name="task_create", description="Create a new task.", safety=ToolSafety.SAFE
+)
 
 
 class TaskUpdateInput(BaseModel):
     taskId: str = Field(description="The ID of the task to update")
-    status: str | None = Field(default=None, description="New status: pending, in_progress, completed, or 'deleted' to remove")
+    status: str | None = Field(
+        default=None,
+        description="New status: pending, in_progress, completed, or 'deleted' to remove",
+    )
     subject: str | None = Field(default=None, description="New subject for the task")
     description: str | None = Field(default=None, description="New description")
-    activeForm: str | None = Field(default=None, description="Present continuous form for progress display")
+    activeForm: str | None = Field(
+        default=None, description="Present continuous form for progress display"
+    )
     owner: str | None = Field(default=None, description="New owner for the task")
-    addBlocks: list[str] | None = Field(default=None, description="Task IDs that this task should block")
-    addBlockedBy: list[str] | None = Field(default=None, description="Task IDs that should block this task")
-    metadata: dict[str, object] | None = Field(default=None, description="Metadata keys to merge into the task. Set a key to null to delete it.")
+    addBlocks: list[str] | None = Field(
+        default=None, description="Task IDs that this task should block"
+    )
+    addBlockedBy: list[str] | None = Field(
+        default=None, description="Task IDs that should block this task"
+    )
+    metadata: dict[str, object] | None = Field(
+        default=None,
+        description="Metadata keys to merge into the task. Set a key to null to delete it.",
+    )
 
     @field_validator("status")
     @classmethod
@@ -359,7 +385,17 @@ class TaskUpdateInput(BaseModel):
         return v
 
 
-def task_update(taskId: str, status: str | None = None, subject: str | None = None, description: str | None = None, activeForm: str | None = None, owner: str | None = None, addBlocks: list[str] | None = None, addBlockedBy: list[str] | None = None, metadata: dict[str, object] | None = None) -> str:
+def task_update(
+    taskId: str,
+    status: str | None = None,
+    subject: str | None = None,
+    description: str | None = None,
+    activeForm: str | None = None,
+    owner: str | None = None,
+    addBlocks: list[str] | None = None,
+    addBlockedBy: list[str] | None = None,
+    metadata: dict[str, object] | None = None,
+) -> str:
     """Update a task's status, fields, or dependencies."""
     from dazi._singletons import task_store
 
@@ -441,7 +477,11 @@ task_update_tool = StructuredTool.from_function(
         Use addBlocks/addBlockedBy to set up dependency chains.""").strip(),
     args_schema=TaskUpdateInput,
 )
-task_update_meta = DaziTool(name="task_update", description="Update a task's status or dependencies.", safety=ToolSafety.SAFE)
+task_update_meta = DaziTool(
+    name="task_update",
+    description="Update a task's status or dependencies.",
+    safety=ToolSafety.SAFE,
+)
 
 
 class TaskListInput(BaseModel):
@@ -526,4 +566,6 @@ task_get_tool = StructuredTool.from_function(
     description="Get full details of a specific task by ID.",
     args_schema=TaskGetInput,
 )
-task_get_meta = DaziTool(name="task_get", description="Get task details by ID.", safety=ToolSafety.SAFE)
+task_get_meta = DaziTool(
+    name="task_get", description="Get task details by ID.", safety=ToolSafety.SAFE
+)

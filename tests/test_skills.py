@@ -1,4 +1,5 @@
 """Tests for dazi/skills.py — skill parsing, substitution, and registry."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +8,6 @@ from unittest.mock import patch
 import pytest
 
 from dazi.skills import (
-    Skill,
     SkillError,
     SkillRegistry,
     _normalize_to_list,
@@ -15,7 +15,6 @@ from dazi.skills import (
     parse_skill_file,
     substitute_arguments,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # _parse_bool
@@ -49,7 +48,9 @@ class TestSubstituteArguments:
         assert result == "Hello my args world"
 
     def test_indexed_arguments(self):
-        result = substitute_arguments("First: $ARGUMENTS[0], Second: $ARGUMENTS[1]", "hello world", [])
+        result = substitute_arguments(
+            "First: $ARGUMENTS[0], Second: $ARGUMENTS[1]", "hello world", []
+        )
         assert result == "First: hello, Second: world"
 
     def test_shorthand_arguments(self):
@@ -99,8 +100,8 @@ class TestParseSkillFile:
         skill_file = skill_dir / "SKILL.md"
         skill_file.write_text(
             "---\n"
-            "description: \"Test skill\"\n"
-            "argument-hint: \"[msg]\"\n"
+            'description: "Test skill"\n'
+            'argument-hint: "[msg]"\n'
             "user-invocable: true\n"
             "---\n"
             "This is the prompt body.\n"

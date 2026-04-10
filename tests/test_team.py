@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from dazi.team import TeamConfig, TeamError, TeamManager, TeamMember
-
 
 # ─────────────────────────────────────────────────────────
 # _sanitize_name
@@ -61,7 +58,13 @@ class TestTeamConfig:
             "name": "proj",
             "description": "desc",
             "members": [
-                {"name": "bob", "agent_id": "bob@proj", "agent_type": "general-purpose", "status": "active", "joined_at": "2025-01-01"}
+                {
+                    "name": "bob",
+                    "agent_id": "bob@proj",
+                    "agent_type": "general-purpose",
+                    "status": "active",
+                    "joined_at": "2025-01-01",
+                }
             ],
             "created_at": "2025-01-01",
         }

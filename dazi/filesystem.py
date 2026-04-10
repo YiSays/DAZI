@@ -13,9 +13,8 @@ from textwrap import dedent
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, field_validator
 
-from dazi.config import DATA_DIR
 from dazi.base import DaziTool, ToolSafety
-
+from dazi.config import DATA_DIR
 
 # ─────────────────────────────────────────────────────────
 # FILE READER — safe, always available
@@ -23,10 +22,10 @@ from dazi.base import DaziTool, ToolSafety
 
 
 class FileReaderInput(BaseModel):
-    file_path: str = Field(description="Absolute path to the file to read. Always read a file before editing it.")
-    offset: int = Field(
-        default=0, description="Line number to start reading from (0-indexed)"
+    file_path: str = Field(
+        description="Absolute path to the file to read. Always read a file before editing it."
     )
+    offset: int = Field(default=0, description="Line number to start reading from (0-indexed)")
     limit: int = Field(default=2000, description="Maximum number of lines to read")
 
     @field_validator("file_path")
@@ -51,9 +50,7 @@ def file_reader(file_path: str, offset: int = 0, limit: int = 2000) -> str:
             header = f"Lines {offset + 1}-{offset + len(selected)} of {len(lines)}\n"
         else:
             header = f"Total lines: {len(lines)}\n"
-        numbered = "\n".join(
-            f"{offset + i + 1:>6}\t{line}" for i, line in enumerate(selected)
-        )
+        numbered = "\n".join(f"{offset + i + 1:>6}\t{line}" for i, line in enumerate(selected))
         return header + numbered
     except Exception as e:
         return f"Error reading file: {e}"
@@ -62,7 +59,10 @@ def file_reader(file_path: str, offset: int = 0, limit: int = 2000) -> str:
 file_reader_tool = StructuredTool.from_function(
     func=file_reader,
     name="file_reader",
-    description="Read a file from disk. Returns content with line numbers. ALWAYS read a file before editing it — never edit blindly.",
+    description=(
+        "Read a file from disk. Returns content with line numbers. "
+        "ALWAYS read a file before editing it — never edit blindly."
+    ),
     args_schema=FileReaderInput,
 )
 
@@ -159,7 +159,10 @@ def plan_writer(content: str) -> str:
 plan_writer_tool = StructuredTool.from_function(
     func=plan_writer,
     name="plan_writer",
-    description="Write or update the plan file. Can ONLY write to the designated plan file — no other files.",
+    description=(
+        "Write or update the plan file. "
+        "Can ONLY write to the designated plan file — no other files."
+    ),
     args_schema=PlanWriterInput,
 )
 
@@ -222,7 +225,12 @@ calculator_meta = DaziTool(
 
 class FileWriterInput(BaseModel):
     file_path: str = Field(description="Absolute path to the file to write")
-    content: str = Field(description="The COMPLETE file content to write. This replaces the entire file — include ALL lines, not just changed ones.")
+    content: str = Field(
+        description=(
+            "The COMPLETE file content to write. This replaces the "
+            "entire file — include ALL lines, not just changed ones."
+        )
+    )
 
     @field_validator("file_path")
     @classmethod
@@ -274,6 +282,9 @@ file_writer_tool = StructuredTool.from_function(
 
 file_writer_meta = DaziTool(
     name="file_writer",
-    description="Create new files or fully replace existing files. OVERWRITES entirely — not for partial edits.",
+    description=(
+        "Create new files or fully replace existing files. "
+        "OVERWRITES entirely — not for partial edits."
+    ),
     safety=ToolSafety.WRITE,
 )

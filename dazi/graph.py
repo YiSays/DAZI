@@ -7,17 +7,20 @@ streaming display, and the main execution wrapper (run_graph_turn).
 from __future__ import annotations
 
 import uuid
+from typing import Annotated
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.errors import GraphInterrupt
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.errors import GraphInterrupt
 from langgraph.types import Command, interrupt
 from rich.console import Console
-from rich.markdown import Markdown
+from rich.live import Live
 from rich.panel import Panel
-from typing_extensions import Annotated, TypedDict
+from rich.spinner import Spinner
+from rich.text import Text
+from typing_extensions import TypedDict
 
 from dazi._singletons import (
     PLAN_FILE,
@@ -29,8 +32,7 @@ from dazi._singletons import (
 from dazi.background import BackgroundTask, BackgroundTaskStatus
 from dazi.compact import auto_compact
 from dazi.concurrent import execute_tools_concurrent
-from dazi.cost_tracker import CostTracker
-from dazi.hooks import HookEvent, HookResult, HookRegistry
+from dazi.hooks import HookEvent, HookRegistry
 from dazi.llm import (
     _get_llm,
     _get_model_name,
@@ -50,7 +52,6 @@ from dazi.permissions import (
     PermissionRule,
     check_permission,
     derive_permission_pattern,
-    parse_rule,
     prompt_permission_decisions,
 )
 from dazi.registry import (
@@ -132,12 +133,8 @@ def _build_full_tool_lists() -> tuple[list, list]:
     mcp_langchain_tools = mcp_manager.build_langchain_tools()
 
     # Filter MCP tools by safety for plan mode (read-only only)
-    safe_mcp = [
-        t for t in mcp_langchain_tools if t.metadata.get("mcp_is_read_only", False)
-    ]
-    write_mcp = [
-        t for t in mcp_langchain_tools if not t.metadata.get("mcp_is_read_only", False)
-    ]
+    safe_mcp = [t for t in mcp_langchain_tools if t.metadata.get("mcp_is_read_only", False)]
+    write_mcp = [t for t in mcp_langchain_tools if not t.metadata.get("mcp_is_read_only", False)]
 
     execute_tools = list(EXECUTE_MODE_TOOLS) + mcp_mgmt_tools + safe_mcp + write_mcp
     plan_tools = list(PLAN_MODE_TOOLS) + mcp_mgmt_tools + safe_mcp
@@ -176,9 +173,7 @@ async def connect_mcp_servers() -> None:
             config = MCPServerConfig.from_dict(name, config_dict)
             mcp_manager.add_server(config)
         except Exception as e:
-            console.print(
-                f"[yellow]Warning: Invalid MCP server config '{name}': {e}[/yellow]"
-            )
+            console.print(f"[yellow]Warning: Invalid MCP server config '{name}': {e}[/yellow]")
 
     console.print(f"[dim]Connecting to {len(mcp_servers)} MCP server(s)...[/dim]")
     results = await mcp_manager.connect_all()
@@ -197,7 +192,9 @@ async def connect_mcp_servers() -> None:
     EXECUTE_TOOLS_FULL, PLAN_TOOLS_FULL = _build_full_tool_lists()
     total_mcp = len(mcp_manager.get_tools())
     console.print(
-        f"[dim]MCP ready: {len(results) - sum(not v for v in results.values())} connected, {total_mcp} tools[/dim]"
+        f"[dim]MCP ready: "
+        f"{len(results) - sum(not v for v in results.values())} "
+        f"connected, {total_mcp} tools[/dim]"
     )
 
 
@@ -241,9 +238,7 @@ async def check_compact(state: AgentState) -> dict:
             f"(saved {saved:,})"
         )
         if result.tool_results_cleared:
-            console.print(
-                f"  [dim]Cleared {result.tool_results_cleared} old tool results[/dim]"
-            )
+            console.print(f"  [dim]Cleared {result.tool_results_cleared} old tool results[/dim]")
         if result.rounds_removed:
             console.print(
                 f"  [dim]Summarized {result.rounds_removed} old conversation rounds[/dim]"
@@ -255,9 +250,7 @@ async def check_compact(state: AgentState) -> dict:
         if result.summary and "failed" in result.summary.lower():
             consecutive_compact_failures += 1
             console.print(f"[red]Compact failed:[/red] {result.summary}")
-            console.print(
-                f"  [dim]Circuit breaker: {consecutive_compact_failures}/3[/dim]"
-            )
+            console.print(f"  [dim]Circuit breaker: {consecutive_compact_failures}/3[/dim]")
 
     return {"messages": []}
 
@@ -370,9 +363,7 @@ async def check_permissions(state: AgentState) -> dict:
             )
             continue
 
-        effective_args = (
-            hook_result.modified_input if hook_result.modified_input else tool_args
-        )
+        effective_args = hook_result.modified_input if hook_result.modified_input else tool_args
 
         if hook_result.permission_override:
             perm_result = PermissionResult(
@@ -381,15 +372,24 @@ async def check_permissions(state: AgentState) -> dict:
             )
         else:
             meta = tool_meta.get(tool_name)
-            safety = meta.safety.value if meta else "destructive"
-            perm_result = check_permission(
-                tool_name, effective_args, rules, perm_mode, safety
-            )
+            if meta is None:
+                # MCP tools are not in mode meta dicts — derive safety from MCP metadata
+                mcp_tool_info = mcp_manager.get_tool(tool_name)
+                if mcp_tool_info:
+                    safety = "safe" if mcp_tool_info.is_read_only else "write"
+                else:
+                    safety = "destructive"
+            else:
+                safety = meta.safety.value
+            perm_result = check_permission(tool_name, effective_args, rules, perm_mode, safety)
 
         if perm_result.behavior == PermissionBehavior.DENY:
             denied_messages.append(
                 ToolMessage(
-                    content=f"DENIED: {perm_result.reason}. The tool '{tool_name}' was blocked by permission rules.",
+                    content=(
+                        f"DENIED: {perm_result.reason}. "
+                        f"The tool '{tool_name}' was blocked by permission rules."
+                    ),
                     tool_call_id=tool_id,
                 )
             )
@@ -564,6 +564,45 @@ checkpointer = MemorySaver()
 app = graph.compile(checkpointer=checkpointer)
 
 # ─────────────────────────────────────────────────────────
+# SPINNER MANAGER
+# ─────────────────────────────────────────────────────────
+
+
+class SpinnerManager:
+    """Wraps a Rich Live spinner with start/stop/update_label control.
+
+    Designed to persist across multiple stream-and-resume cycles within a
+    single graph turn, only pausing for prompt_toolkit interactions that
+    bypass Rich's Live display.
+    """
+
+    def __init__(self, initial_label: str = "Thinking...") -> None:
+        self._spinner = Spinner("dots", Text(initial_label, style="bold cyan"))
+        self._live = Live(
+            self._spinner,
+            console=console,
+            refresh_per_second=8,
+            transient=True,
+        )
+        self._started = False
+
+    def start(self) -> None:
+        if not self._started:
+            self._live.start()
+            self._started = True
+
+    def stop(self) -> None:
+        if self._started:
+            self._live.stop()
+            self._started = False
+
+    def update_label(self, label: str) -> None:
+        self._spinner = Spinner("dots", Text(label, style="bold cyan"))
+        if self._started:
+            self._live.update(self._spinner)
+
+
+# ─────────────────────────────────────────────────────────
 # STREAMING DISPLAY
 # ─────────────────────────────────────────────────────────
 
@@ -590,62 +629,63 @@ def _print_tool_result_compact(content: str, *, is_error: bool = False) -> None:
 
 async def _stream_and_display(
     stream,
-    label_suffix: str = "",
-    status_label: str = "Thinking...",
+    *,
+    spinner: SpinnerManager,
 ) -> None:
     """Consume astream_events and print live output to console.
 
-    Shows a spinner until the first output arrives, then renders streaming
-    content: on_chat_model_stream (accumulate text, render as Markdown with
-    DAZI: prefix), on_chat_model_end (compact tool call lines), and
-    on_tool_end (compact result lines).
+    Pure event renderer — does NOT manage the spinner lifecycle.
+    The caller (run_graph_turn) starts/stops the spinner.
+
+    Events handled:
+      - on_chat_model_stream: accumulate text for Markdown rendering
+      - on_chat_model_end: render text or tool calls
+      - on_tool_end: render compact tool results
     """
+    from dazi.repl_display import render_dazi_panel
+
     accumulated_text = ""
-    status = console.status(f"[bold cyan]{status_label}[/bold cyan]")
-    status.start()
 
-    try:
-        async for event in stream:
-            kind = event["event"]
+    async for event in stream:
+        kind = event["event"]
 
-            if kind == "on_chat_model_stream":
-                chunk = event["data"]["chunk"]
-                if isinstance(chunk.content, str) and chunk.content:
-                    if status._live.is_started:  # stop spinner on first text
-                        status.stop()
-                    accumulated_text += chunk.content
+        if kind == "on_chat_model_stream":
+            chunk = event["data"]["chunk"]
+            if isinstance(chunk.content, str) and chunk.content:
+                spinner.update_label("Thinking...")
+                accumulated_text += chunk.content
 
-            elif kind == "on_chat_model_end":
-                output = event["data"]["output"]
-                if status._live.is_started:
-                    status.stop()
-                has_tool_calls = bool(output.tool_calls)
-                # Only show DAZI: prefix for pure text responses (no tool calls)
-                if accumulated_text.strip() and not has_tool_calls:
-                    console.print()
-                    console.print("[bold cyan]DAZI:[/bold cyan] ", end="")
-                    console.print(Markdown(accumulated_text))
-                    accumulated_text = ""
-                # Print tool calls in compact format
-                for tc in output.tool_calls:
-                    _print_tool_call_compact(tc)
+        elif kind == "on_chat_model_end":
+            output = event["data"]["output"]
+            has_tool_calls = bool(output.tool_calls)
+            # Only show DAZI panel for pure text responses (no tool calls)
+            if accumulated_text.strip() and not has_tool_calls:
+                console.print()
+                render_dazi_panel(accumulated_text, console)
+                accumulated_text = ""
+            # Print tool calls in compact format
+            for tc in output.tool_calls:
+                _print_tool_call_compact(tc)
+            if has_tool_calls:
+                spinner.update_label("Executing tools...")
 
-            elif kind == "on_tool_end":
-                tool_output = event["data"]["output"]
-                raw = tool_output.content if hasattr(tool_output, "content") else str(tool_output)
-                content = str(raw)[:500]
-                if len(str(raw)) > 500:
-                    content += "\n... (truncated)"
-                is_error = content.startswith("DENIED") or content.startswith("BLOCKED") or content.startswith("REQUIRES")
-                _print_tool_result_compact(content, is_error=is_error)
-    finally:
-        if status._live.is_started:
-            status.stop()
-        # Handle edge case: text accumulated but stream ended without on_chat_model_end
-        if accumulated_text.strip():
-            console.print()
-            console.print("[bold cyan]DAZI:[/bold cyan] ", end="")
-            console.print(Markdown(accumulated_text))
+        elif kind == "on_tool_end":
+            tool_output = event["data"]["output"]
+            raw = tool_output.content if hasattr(tool_output, "content") else str(tool_output)
+            content = str(raw)[:500]
+            if len(str(raw)) > 500:
+                content += "\n... (truncated)"
+            is_error = (
+                content.startswith("DENIED")
+                or content.startswith("BLOCKED")
+                or content.startswith("REQUIRES")
+            )
+            _print_tool_result_compact(content, is_error=is_error)
+
+    # Handle edge case: text accumulated but stream ended without on_chat_model_end
+    if accumulated_text.strip():
+        console.print()
+        render_dazi_panel(accumulated_text, console)
 
 
 # ─────────────────────────────────────────────────────────
@@ -663,13 +703,14 @@ async def run_graph_turn(
 ) -> dict:
     """Invoke the agent graph with streaming, handle interrupts, and display results.
 
-    Encapsulates the pattern shared by skill, regular, and tick turns:
-    stream -> interrupt loop -> update state -> background notifications.
+    A single spinner wraps the entire turn (LLM rounds, tool execution, and
+    permission interrupts).  The spinner only pauses briefly for prompt_toolkit
+    permission prompts, which bypass Rich's Live display.
 
     Args:
         messages: The message list to send (already filtered for SystemMessage).
         state: The mutable REPL state dict (mode, etc.).
-        status_label: Text for the console.status spinner (shown before streaming).
+        status_label: Initial text for the spinner.
         label_suffix: Suffix for panel titles, e.g. " (tick)".
 
     Returns:
@@ -682,37 +723,46 @@ async def run_graph_turn(
         "consecutive_compact_failures": consecutive_compact_failures,
     }
     thread_id = str(uuid.uuid4())[:8]
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
 
-    # Initial stream
+    spinner = SpinnerManager(initial_label=status_label)
+    spinner.start()
+
     try:
-        stream = app.astream_events(input_state, config, version="v2")
-        await _stream_and_display(stream, label_suffix=label_suffix, status_label=status_label)
-    except GraphInterrupt:
-        pass  # state saved by checkpointer, handle below
-
-    # Handle interrupts — must be outside streaming
-    graph_state = app.get_state(config)
-    while graph_state.next:
-        interrupt_value = None
-        for task in graph_state.tasks:
-            if task.interrupts:
-                interrupt_value = task.interrupts[0].value
-                break
-        if not interrupt_value or "ask_tools" not in interrupt_value:
-            break
-        ask_tools = interrupt_value["ask_tools"]
-        decisions = await prompt_permission_decisions(ask_tools, session, console)
+        # Initial stream
         try:
-            stream = app.astream_events(
-                Command(resume=decisions), config, version="v2"
-            )
-            await _stream_and_display(stream, label_suffix=label_suffix, status_label="Thinking...")
+            stream = app.astream_events(input_state, config, version="v2")
+            await _stream_and_display(stream, spinner=spinner)
         except GraphInterrupt:
-            pass
-        graph_state = app.get_state(config)
+            pass  # state saved by checkpointer, handle below
 
-    # Get final state
+        # Handle interrupts — must pause spinner for prompt_toolkit interaction
+        graph_state = app.get_state(config)
+        while graph_state.next:
+            interrupt_value = None
+            for task in graph_state.tasks:
+                if task.interrupts:
+                    interrupt_value = task.interrupts[0].value
+                    break
+            if not interrupt_value or "ask_tools" not in interrupt_value:
+                break
+            ask_tools = interrupt_value["ask_tools"]
+
+            # Pause spinner — prompt_toolkit writes directly to terminal
+            spinner.stop()
+            decisions = await prompt_permission_decisions(ask_tools, session, console)
+            spinner.start()
+
+            try:
+                stream = app.astream_events(Command(resume=decisions), config, version="v2")
+                await _stream_and_display(stream, spinner=spinner)
+            except GraphInterrupt:
+                pass
+            graph_state = app.get_state(config)
+    finally:
+        spinner.stop()
+
+    # Get final state (spinner stopped, safe to print)
     result = app.get_state(config).values
 
     # Update REPL state
@@ -742,6 +792,8 @@ def display_background_notifications(
     so the LLM is aware of the completion.
 
     """
+    from dazi.theme import BORDER as _BORDER
+
     notification_msgs = []
 
     for task in completed_tasks:
@@ -765,11 +817,9 @@ def display_background_notifications(
         if task.error:
             lines.append(f"  Error: {task.error}")
         if output:
-            lines.append(f"\n  [dim]Output (last 10 lines):[/dim]")
+            lines.append("\n  [dim]Output (last 10 lines):[/dim]")
             for out_line in output.splitlines()[-10:]:
                 lines.append(f"  [dim]{out_line}[/dim]")
-
-        from dazi.theme import BORDER as _BORDER
 
         border_style = {
             BackgroundTaskStatus.COMPLETED: _BORDER["success"],

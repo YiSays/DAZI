@@ -16,15 +16,14 @@ from __future__ import annotations
 import os
 import platform
 import subprocess
-from enum import Enum
-from typing import Any
-
+from enum import StrEnum
 
 # ─────────────────────────────────────────────────────────
 # PROMPT SECTIONS
 # ─────────────────────────────────────────────────────────
 
-class PromptSection(str, Enum):
+
+class PromptSection(StrEnum):
     """Sections of the system prompt.
 
     Static sections (cached once):
@@ -33,6 +32,7 @@ class PromptSection(str, Enum):
     Dynamic sections (recomputed per turn):
       SESSION_GUIDANCE, SKILLS, MEMORY, ENVIRONMENT, PERMISSIONS, DAZI_MD
     """
+
     # Static
     INTRO = "intro"
     SYSTEM = "system"
@@ -68,7 +68,6 @@ Use the instructions below and the tools available to you to assist the user.
 
 IMPORTANT: You must NEVER generate or guess URLs for the user unless you are
 confident that the URLs are for helping the user with programming.""",
-
     PromptSection.SYSTEM: """\
 # System
  - All text you output outside of tool use is displayed to the user. Output text
@@ -88,7 +87,6 @@ confident that the URLs are for helping the user with programming.""",
  - The system will automatically compress prior messages in your conversation as it
    approaches context limits. This means your conversation is not limited by the
    context window.""",
-
     PromptSection.DOING_TASKS: """\
 # Task execution
  - The user will primarily request you to perform software engineering tasks. These
@@ -128,7 +126,6 @@ confident that the URLs are for helping the user with programming.""",
  - Avoid backwards-compatibility hacks like renaming unused _vars, re-exporting types,
    or adding "removed" comments for removed code. If you are certain that something
    is unused, you can delete it completely.""",
-
     PromptSection.ACTIONS: """\
 # Executing actions with care
 
@@ -149,14 +146,16 @@ When you encounter an obstacle, do not use destructive actions as a shortcut to 
 make it go away. For instance, try to identify root causes and fix underlying issues
 rather than bypassing safety checks. Follow both the spirit and letter of these
 instructions — measure twice, cut once.""",
-
     PromptSection.USING_TOOLS: """\
 # Using your tools
  - Do NOT use shell_exec to run commands when a relevant dedicated tool is provided.
    Using dedicated tools allows the user to better understand and review your work:
    - To read files use file_reader instead of cat, head, tail, or sed
-   - To CREATE new files or FULLY REPLACE an existing file when you have the complete content, use file_writer
-   - To make PARTIAL EDITS to existing files (changing a few lines, fixing a function, etc.), use shell_exec with sed or a heredoc patch — NEVER use file_writer for partial edits as it overwrites the entire file
+   - To CREATE new files or FULLY REPLACE an existing file when you have
+     the complete content, use file_writer
+   - To make PARTIAL EDITS to existing files (changing a few lines, fixing
+     a function, etc.), use shell_exec with sed or a heredoc patch — NEVER
+     use file_writer for partial edits as it overwrites the entire file
    - To search for files use Glob instead of find or ls
    - To search the content of files, use Grep instead of grep or rg
  - Reserve using shell_exec exclusively for system commands, terminal operations,
@@ -168,10 +167,13 @@ instructions — measure twice, cut once.""",
 
 ## File Editing Rules
  - ALWAYS read a file with file_reader before editing it — never edit blindly
- - For partial edits, construct sed commands carefully. Prefer: `sed -i '' 's/old/new/' file` for simple replacements, or use a heredoc to patch specific line ranges
- - For file_writer: you MUST provide the COMPLETE file content — never provide only the changed portion
- - When in doubt, read the file first with file_reader, construct the full updated content, then write it with file_writer""",
-
+ - For partial edits, construct sed commands carefully. Prefer:
+   `sed -i '' 's/old/new/' file` for simple replacements, or use a heredoc
+   to patch specific line ranges
+ - For file_writer: you MUST provide the COMPLETE file content — never
+   provide only the changed portion
+ - When in doubt, read the file first with file_reader, construct the
+   full updated content, then write it with file_writer""",
     PromptSection.TONE_AND_STYLE: """\
 # Tone and style
  - Only use emojis if the user explicitly requests it. Avoid using emojis in all
@@ -183,7 +185,6 @@ instructions — measure twice, cut once.""",
  - When referencing GitHub issues or pull requests, use the owner/repo#123 format
    (e.g. owner/repo#100) so they render as clickable links.
  - Do not use a colon before tool calls.""",
-
     PromptSection.OUTPUT_EFFICIENCY: """\
 # Output efficiency
 
@@ -209,6 +210,7 @@ over long explanations. This does not apply to code or tool calls.""",
 # DYNAMIC SECTION GENERATORS
 # ─────────────────────────────────────────────────────────
 
+
 def build_session_guidance(mode: str = "execute", has_plan: bool = False) -> str:
     """Build SESSION_GUIDANCE section based on current mode.
 
@@ -227,6 +229,7 @@ You are in PLAN MODE. Rules:
 
     if has_plan:
         from dazi._singletons import PLAN_FILE
+
         section += f"\n\nNote: A plan file exists at `{PLAN_FILE}`. Read it first if relevant."
 
     return section
@@ -246,21 +249,29 @@ def build_environment_section() -> str:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--is-inside-work-tree"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             # Get branch + dirty status
             branch_result = subprocess.run(
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "unknown"
 
             status_result = subprocess.run(
                 ["git", "status", "--porcelain"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
-            changes = len(status_result.stdout.strip().split("\n")) if status_result.stdout.strip() else 0
+            changes = (
+                len(status_result.stdout.strip().split("\n")) if status_result.stdout.strip() else 0
+            )
             git_info = f"branch={branch}, {changes} changed file(s)"
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
@@ -285,7 +296,7 @@ def build_permissions_section(
     }
     return f"""\
 ## Permissions
-Mode: {mode} ({mode_desc.get(mode, 'default')})
+Mode: {mode} ({mode_desc.get(mode, "default")})
 Active rules: {rule_count}"""
 
 
@@ -317,6 +328,7 @@ def build_skills_section(skills_content: str) -> str:
 # ─────────────────────────────────────────────────────────
 # SYSTEM PROMPT BUILDER
 # ─────────────────────────────────────────────────────────
+
 
 class SystemPromptBuilder:
     """Builds system prompts with static/dynamic caching.
@@ -398,10 +410,7 @@ class SystemPromptBuilder:
         ]
 
         for section in static_order:
-            content = (
-                self._custom_static_overrides.get(section)
-                or STATIC_SECTIONS.get(section, "")
-            )
+            content = self._custom_static_overrides.get(section) or STATIC_SECTIONS.get(section, "")
             if content.strip():
                 parts.append(content)
 
@@ -507,7 +516,4 @@ class SystemPromptBuilder:
 
     def get_section(self, section: PromptSection) -> str:
         """Get the content of a specific static section."""
-        return (
-            self._custom_static_overrides.get(section)
-            or STATIC_SECTIONS.get(section, "")
-        )
+        return self._custom_static_overrides.get(section) or STATIC_SECTIONS.get(section, "")

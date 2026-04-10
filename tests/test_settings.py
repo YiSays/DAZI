@@ -3,18 +3,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-import pytest
 
 from dazi.settings import (
     DaziSettings,
-    SettingsManager,
-    SettingsSource,
     _dedupe_preserve_order,
     merge_settings,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # DaziSettings dataclass

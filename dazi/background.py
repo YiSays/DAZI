@@ -15,12 +15,14 @@ import secrets
 import signal
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from dazi.base import DaziTool, ToolSafety
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
+from dazi.base import DaziTool, ToolSafety
 
 # ─────────────────────────────────────────────────────────
 # CONSTANTS
@@ -38,11 +40,12 @@ GRACEFUL_SHUTDOWN_TIMEOUT = 5.0  # seconds before SIGKILL
 # ─────────────────────────────────────────────────────────
 
 
-class BackgroundTaskStatus(str, Enum):
+class BackgroundTaskStatus(StrEnum):
     """Background task lifecycle.
 
     Lifecycle: pending -> running -> (completed | failed | killed)
     """
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -65,6 +68,7 @@ class BackgroundTask:
       - Tracks live asyncio.subprocess.Process
       - Has notified flag for deduplication
     """
+
     id: str
     command: str
     status: BackgroundTaskStatus = BackgroundTaskStatus.PENDING
@@ -257,7 +261,7 @@ class BackgroundTaskManager:
         # Wait for graceful shutdown
         try:
             await asyncio.wait_for(process.wait(), timeout=GRACEFUL_SHUTDOWN_TIMEOUT)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Force kill
             try:
                 os.killpg(os.getpgid(process.pid), signal.SIGKILL)
@@ -461,14 +465,12 @@ class BackgroundTaskManager:
 # BACKGROUND TOOLS
 # ─────────────────────────────────────────────────────────
 
-from textwrap import dedent
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
-
 
 class RunBackgroundInput(BaseModel):
     command: str = Field(description="The shell command to execute in the background")
-    description: str = Field(default="", description="Brief description of what this task does (for display purposes)")
+    description: str = Field(
+        default="", description="Brief description of what this task does (for display purposes)"
+    )
 
 
 async def run_background(command: str, description: str = "") -> str:
@@ -488,14 +490,23 @@ async def run_background(command: str, description: str = "") -> str:
 run_background_tool = StructuredTool.from_function(
     func=run_background,
     name="run_background",
-    description="Execute a shell command in the background. Returns immediately with a task_id. Use check_background to monitor.",
+    description=(
+        "Execute a shell command in the background. "
+        "Returns immediately with a task_id. Use check_background to monitor."
+    ),
     args_schema=RunBackgroundInput,
 )
-run_background_meta = DaziTool(name="run_background", description="Run a shell command in the background.", safety=ToolSafety.WRITE)
+run_background_meta = DaziTool(
+    name="run_background",
+    description="Run a shell command in the background.",
+    safety=ToolSafety.WRITE,
+)
 
 
 class CheckBackgroundInput(BaseModel):
-    task_id: str = Field(description="The ID of the background task to check (e.g., 'bash_a1b2c3d4')")
+    task_id: str = Field(
+        description="The ID of the background task to check (e.g., 'bash_a1b2c3d4')"
+    )
     tail: int = Field(default=20, description="Number of recent output lines to show (default 20)")
 
 
@@ -509,7 +520,9 @@ def check_background(task_id: str, tail: int = 20) -> str:
 
     status_str = f"[{task.status.value}]"
     pid_str = f"PID: {task.pid}" if task.pid else "PID: -"
-    duration_str = f"Duration: {task.duration_seconds:.1f}s" if task.duration_seconds else "Duration: -"
+    duration_str = (
+        f"Duration: {task.duration_seconds:.1f}s" if task.duration_seconds else "Duration: -"
+    )
 
     lines = [
         f"Background task {task.id}: {status_str}",
@@ -540,7 +553,9 @@ check_background_tool = StructuredTool.from_function(
     description="Check the status and recent output of a background task.",
     args_schema=CheckBackgroundInput,
 )
-check_background_meta = DaziTool(name="check_background", description="Check background task status.", safety=ToolSafety.SAFE)
+check_background_meta = DaziTool(
+    name="check_background", description="Check background task status.", safety=ToolSafety.SAFE
+)
 
 
 class CancelBackgroundInput(BaseModel):
@@ -573,4 +588,8 @@ cancel_background_tool = StructuredTool.from_function(
     description="Cancel a running background task. Sends SIGTERM, then SIGKILL if needed.",
     args_schema=CancelBackgroundInput,
 )
-cancel_background_meta = DaziTool(name="cancel_background", description="Cancel a running background task.", safety=ToolSafety.DESTRUCTIVE)
+cancel_background_meta = DaziTool(
+    name="cancel_background",
+    description="Cancel a running background task.",
+    safety=ToolSafety.DESTRUCTIVE,
+)

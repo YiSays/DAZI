@@ -6,19 +6,19 @@ We implement 5 core events that cover the tool execution lifecycle:
 
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
 
 from dazi.permissions import PermissionBehavior
-
 
 # ─────────────────────────────────────────────────────────
 # HOOK EVENTS
 # ─────────────────────────────────────────────────────────
 
-class HookEvent(str, Enum):
+
+class HookEvent(StrEnum):
     """Core hook events in the tool execution lifecycle.
 
     Events:
@@ -28,6 +28,7 @@ class HookEvent(str, Enum):
       USER_PROMPT_SUBMIT   — when user submits a prompt (before LLM call)
       SESSION_START         — when agent session begins
     """
+
     PRE_TOOL_USE = "pre_tool_use"
     POST_TOOL_USE = "post_tool_use"
     POST_TOOL_USE_FAILURE = "post_tool_use_failure"
@@ -39,6 +40,7 @@ class HookEvent(str, Enum):
 # HOOK RESULT
 # ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class HookResult:
     """Result from a hook execution.
@@ -49,6 +51,7 @@ class HookResult:
       - Override permission behavior (permission_override)
       - Block execution entirely (should_block)
     """
+
     modified_input: dict[str, Any] | None = None
     modified_output: str | None = None
     permission_override: PermissionBehavior | None = None
@@ -82,6 +85,7 @@ HookHandler = Callable[..., Coroutine[Any, Any, HookResult]]
 # ─────────────────────────────────────────────────────────
 # HOOK REGISTRY
 # ─────────────────────────────────────────────────────────
+
 
 class HookRegistry:
     """Registry for hook handlers.
@@ -118,9 +122,7 @@ class HookRegistry:
         if event not in self._hooks:
             return False
         original_len = len(self._hooks[event])
-        self._hooks[event] = [
-            (p, h) for p, h in self._hooks[event] if h is not handler
-        ]
+        self._hooks[event] = [(p, h) for p, h in self._hooks[event] if h is not handler]
         return len(self._hooks[event]) < original_len
 
     def clear(self, event: HookEvent | None = None) -> None:
@@ -164,7 +166,4 @@ class HookRegistry:
 
     def list_hooks(self) -> dict[str, list[int]]:
         """List all registered hooks for debugging."""
-        return {
-            event.value: [p for p, _ in handlers]
-            for event, handlers in self._hooks.items()
-        }
+        return {event.value: [p for p, _ in handlers] for event, handlers in self._hooks.items()}

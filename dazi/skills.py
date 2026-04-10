@@ -10,12 +10,13 @@ KEY CONCEPTS:
 
 from __future__ import annotations
 
-import io
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
 from dazi.base import DaziTool, ToolSafety
 
@@ -41,6 +42,7 @@ _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)", re.DOTALL)
 # EXCEPTIONS
 # ─────────────────────────────────────────────────────────
 
+
 class SkillError(Exception):
     """Error during skill loading, parsing, or invocation."""
 
@@ -48,6 +50,7 @@ class SkillError(Exception):
 # ─────────────────────────────────────────────────────────
 # DATA MODELS
 # ─────────────────────────────────────────────────────────
+
 
 @dataclass
 class Skill:
@@ -69,6 +72,7 @@ class Skill:
         source_path: File path where SKILL.md was loaded from.
         is_bundled: True for built-in skills.
     """
+
     name: str
     description: str
     prompt: str
@@ -88,6 +92,7 @@ class Skill:
 # ─────────────────────────────────────────────────────────
 # FRONTMATTER PARSING
 # ─────────────────────────────────────────────────────────
+
 
 def _normalize_to_list(value: str | list[str] | None) -> list[str]:
     """Normalize a frontmatter value to list[str]."""
@@ -248,10 +253,12 @@ def substitute_arguments(prompt: str, args: str, named_args: list[str]) -> str:
     tokens = args.split() if args else []
 
     # Track whether any substitution happened
-    has_placeholder = bool(_INDEXED_ARG_RE.search(prompt) or
-                           _SHORTHAND_ARG_RE.search(prompt) or
-                           _NAMED_ARG_RE.search(prompt) or
-                           _FULL_ARG_RE.search(prompt))
+    has_placeholder = bool(
+        _INDEXED_ARG_RE.search(prompt)
+        or _SHORTHAND_ARG_RE.search(prompt)
+        or _NAMED_ARG_RE.search(prompt)
+        or _FULL_ARG_RE.search(prompt)
+    )
 
     if not has_placeholder and args:
         # No placeholders found — append arguments at end
@@ -407,6 +414,7 @@ def _get_bundled_skills() -> list[Skill]:
 # SKILL DISCOVERY
 # ─────────────────────────────────────────────────────────
 
+
 def _scan_skills_dir(skills_dir: Path) -> list[Skill]:
     """Scan a skills directory for SKILL.md files and load them.
 
@@ -488,6 +496,7 @@ def discover_skills(
 # ─────────────────────────────────────────────────────────
 # SKILL REGISTRY
 # ─────────────────────────────────────────────────────────
+
 
 class SkillRegistry:
     """Central registry for all loaded skills.
@@ -583,9 +592,7 @@ class SkillRegistry:
         skill = self._skills.get(name)
         if skill is None:
             available = ", ".join(sorted(self._skills.keys()))
-            raise SkillError(
-                f"Skill '{name}' not found. Available skills: {available}"
-            )
+            raise SkillError(f"Skill '{name}' not found. Available skills: {available}")
 
         return substitute_arguments(skill.prompt, args, skill.arguments)
 
@@ -597,9 +604,6 @@ class SkillRegistry:
 # ─────────────────────────────────────────────────────────
 # SKILL TOOL
 # ─────────────────────────────────────────────────────────
-
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
 
 
 class SkillToolInput(BaseModel):
@@ -629,7 +633,10 @@ skill_tool = StructuredTool.from_function(
     func=lambda **kwargs: "",
     coroutine=skill_tool_func,
     name="skill",
-    description="Invoke a named skill to get specialized instructions for a task. Skills expand into detailed prompts.",
+    description=(
+        "Invoke a named skill to get specialized instructions for a task. "
+        "Skills expand into detailed prompts."
+    ),
     args_schema=SkillToolInput,
 )
 

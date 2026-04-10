@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-
 from langchain_core.messages import AIMessage, HumanMessage
 
 from tests.helpers.mock_singletons import patch_singletons
@@ -69,8 +68,8 @@ class TestGetEffectiveRules:
 
 class TestShouldContinue:
     def test_ai_message_with_tool_calls_routes_to_check_permissions(self):
+
         from dazi.graph import should_continue
-        from langgraph.graph import END
 
         ai_msg = AIMessage(
             content="",
@@ -81,8 +80,9 @@ class TestShouldContinue:
         assert result == "check_permissions"
 
     def test_ai_message_without_tool_calls_routes_to_end(self):
-        from dazi.graph import should_continue
         from langgraph.graph import END
+
+        from dazi.graph import should_continue
 
         ai_msg = AIMessage(content="Hello! How can I help?")
         state = {"messages": [HumanMessage(content="hi"), ai_msg]}

@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field, fields
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +36,7 @@ PROJECT_SETTINGS_FILENAME = "settings.json"
 # ─────────────────────────────────────────────────────────
 
 
-class SettingsSource(str, Enum):
+class SettingsSource(StrEnum):
     """Priority order for settings layers (low to high).
 
     Higher-priority source overrides lower-priority for primitives.
@@ -89,6 +89,7 @@ class DaziSettings:
     auto_memory: bool = True
     max_concurrent_tools: int = 5
     mcp_servers: dict[str, dict] = field(default_factory=dict)
+    context_window: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict for JSON persistence.
@@ -159,9 +160,7 @@ def merge_settings(base: DaziSettings, override: DaziSettings) -> DaziSettings:
     merged.model = override.model
     # api_base_url: None means "not set", so fall back to base
     merged.api_base_url = (
-        override.api_base_url
-        if override.api_base_url is not None
-        else base.api_base_url
+        override.api_base_url if override.api_base_url is not None else base.api_base_url
     )
     # api_key: None means "not set", so fall back to base (or env var in create_llm)
     merged.api_key = override.api_key if override.api_key is not None else base.api_key
@@ -211,9 +210,7 @@ class SettingsManager:
         """
         self._project_root = project_root or Path.cwd()
         self._user_path = Path.home() / ".dazi" / USER_SETTINGS_FILENAME
-        self._project_path = (
-            self._project_root / ".dazi" / PROJECT_SETTINGS_FILENAME
-        )
+        self._project_path = self._project_root / ".dazi" / PROJECT_SETTINGS_FILENAME
         self._settings: DaziSettings | None = None
         # Track which source set each field, for /settings display
         self._source_map: dict[str, str] = {}
@@ -311,11 +308,9 @@ class SettingsManager:
         Used by /settings REPL command to annotate field values.
         """
         source_map: dict[str, str] = {}
-        default_values = DaziSettings()
 
         for f in fields(DaziSettings):
             field_name = f.name
-            effective_value = getattr(self._settings, field_name)
 
             # Check if the field was explicitly set in a layer's file
             # (i.e., it's not just the DaziSettings default)

@@ -10,20 +10,16 @@ KEY CONCEPTS:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
 from dazi.tokenizer import (
-    AUTOCOMPACT_BUFFER_TOKENS,
     MAX_OUTPUT_TOKENS_FOR_SUMMARY,
     count_messages_tokens,
-    count_text_tokens,
     get_compact_threshold,
-    get_context_window,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # CONSTANTS
@@ -36,10 +32,18 @@ COMPACT_BOUNDARY = "<!-- COMPACT_BOUNDARY -->"
 CLEARED_TOOL_RESULT = "[Old tool result content cleared]"
 
 # Tools whose results can be micro-compacted
-COMPACTABLE_TOOLS = frozenset({
-    "file_reader", "shell_exec", "grep", "glob",
-    "web_search", "web_fetch", "memory_read", "memory_search",
-})
+COMPACTABLE_TOOLS = frozenset(
+    {
+        "file_reader",
+        "shell_exec",
+        "grep",
+        "glob",
+        "web_search",
+        "web_fetch",
+        "memory_read",
+        "memory_search",
+    }
+)
 
 # Default number of recent rounds to preserve during compact
 DEFAULT_KEEP_RECENT_ROUNDS = 3
@@ -52,9 +56,11 @@ COMPACT_MAX_OUTPUT_TOKENS = MAX_OUTPUT_TOKENS_FOR_SUMMARY
 # DATA CLASSES
 # ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class CompactResult:
     """Result of a compact operation."""
+
     messages: list[BaseMessage]
     tokens_before: int
     tokens_after: int
@@ -67,6 +73,7 @@ class CompactResult:
 # ─────────────────────────────────────────────────────────
 # MESSAGE GROUPING
 # ─────────────────────────────────────────────────────────
+
 
 def group_messages_by_round(messages: list[BaseMessage]) -> list[list[BaseMessage]]:
     """Group messages into API rounds.
@@ -121,6 +128,7 @@ def group_messages_by_round(messages: list[BaseMessage]) -> list[list[BaseMessag
 # ─────────────────────────────────────────────────────────
 # MICRO-COMPACT
 # ─────────────────────────────────────────────────────────
+
 
 def micro_compact(
     messages: list[BaseMessage],
@@ -299,8 +307,7 @@ async def full_compact(
 
     # Build summary message
     summary_text = (
-        f"{COMPACT_SUMMARY_PREFIX}\n\n{summary}\n\n"
-        f"{COMPACT_SUMMARY_SUFFIX}\n{COMPACT_BOUNDARY}"
+        f"{COMPACT_SUMMARY_PREFIX}\n\n{summary}\n\n{COMPACT_SUMMARY_SUFFIX}\n{COMPACT_BOUNDARY}"
     )
 
     summary_message = SystemMessage(content=summary_text)
@@ -367,6 +374,7 @@ def _format_for_summarization(messages: list[BaseMessage]) -> str:
 # AUTO-COMPACT ORCHESTRATOR
 # ─────────────────────────────────────────────────────────
 
+
 async def auto_compact(
     messages: list[BaseMessage],
     llm: Any,
@@ -425,7 +433,9 @@ async def auto_compact(
 
     # Still over threshold — try full compact
     full_result = await full_compact(
-        micro_result.messages, llm, model=model,
+        micro_result.messages,
+        llm,
+        model=model,
     )
 
     return full_result
@@ -434,6 +444,7 @@ async def auto_compact(
 # ─────────────────────────────────────────────────────────
 # MANUAL COMPACT — user-triggered /compact
 # ─────────────────────────────────────────────────────────
+
 
 async def manual_compact(
     messages: list[BaseMessage],

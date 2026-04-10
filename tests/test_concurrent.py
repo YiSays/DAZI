@@ -1,7 +1,7 @@
 """Tests for dazi/concurrent.py — tool partitioning and concurrent execution."""
+
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -9,13 +9,11 @@ from langchain_core.messages import ToolMessage
 
 from dazi.base import DaziTool, ToolSafety
 from dazi.concurrent import (
-    ToolCallBatch,
     execute_tool,
     execute_tools_concurrent,
     execute_tools_sync,
     partition_tool_calls,
 )
-
 
 # ─────────────────────────────────────────────────────────
 # Helpers
@@ -33,7 +31,7 @@ def _mock_tool(name: str = "test_tool", result: str = "ok") -> MagicMock:
     """Create a mock LangChain tool."""
     tool = MagicMock()
     tool.name = name
-    tool.invoke = MagicMock(return_value=result)
+    tool.ainvoke = AsyncMock(return_value=result)
     return tool
 
 
@@ -52,14 +50,18 @@ class TestPartitionToolCalls:
 
     def test_write_tools_go_serial(self):
         tc = {"name": "file_writer", "args": {"path": "/tmp/x"}, "id": "1"}
-        meta = {"file_writer": DaziTool(name="file_writer", description="", safety=ToolSafety.WRITE)}
+        meta = {
+            "file_writer": DaziTool(name="file_writer", description="", safety=ToolSafety.WRITE)
+        }
         batch = partition_tool_calls([tc], meta)
         assert len(batch.parallel) == 0
         assert len(batch.serial) == 1
 
     def test_destructive_tools_go_serial(self):
         tc = {"name": "shell_exec", "args": {"cmd": "rm -rf /"}, "id": "1"}
-        meta = {"shell_exec": DaziTool(name="shell_exec", description="", safety=ToolSafety.DESTRUCTIVE)}
+        meta = {
+            "shell_exec": DaziTool(name="shell_exec", description="", safety=ToolSafety.DESTRUCTIVE)
+        }
         batch = partition_tool_calls([tc], meta)
         assert len(batch.parallel) == 0
         assert len(batch.serial) == 1
@@ -114,7 +116,7 @@ class TestExecuteTool:
     async def test_exception_returns_error(self):
         tool = MagicMock()
         tool.name = "broken"
-        tool.invoke = MagicMock(side_effect=ValueError("crash"))
+        tool.ainvoke = AsyncMock(side_effect=ValueError("crash"))
         tc = {"name": "broken", "args": {}, "id": "call_1"}
         msg = await execute_tool(tc, [tool])
         assert "Error" in msg.content
