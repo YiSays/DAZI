@@ -42,10 +42,11 @@ from dazi.graph import (
     permission_rules,
     rebuild_tool_lists,
 )
-from dazi.llm import _get_llm, _get_model_name, _update_proactive_prompt
+from dazi.llm import _get_llm, _get_model_name
 from dazi.memory import MemoryEntry
 from dazi.permissions import parse_rule
 from dazi.proactive import ProactiveSource
+from dazi.prompt_builder import _update_proactive_prompt
 from dazi.registry import (
     EXECUTE_MODE_META,
     EXECUTE_MODE_TOOLS,
@@ -174,6 +175,7 @@ async def handle_command(
 
         run_onboarding(console)
         settings_manager.reload()
+        await connect_mcp_servers()
         return "continue"
 
     # ── /mcp ──
@@ -231,6 +233,8 @@ async def handle_command(
         if state["mode"] == PLAN_MODE:
             console.print("[blue]Already in plan mode.[/blue]")
             return "continue"
+        if PLAN_FILE.exists():
+            PLAN_FILE.unlink()
         state["mode"] = PLAN_MODE
         console.print(
             Panel(

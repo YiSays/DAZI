@@ -16,7 +16,7 @@ from dazi._singletons import (
     worktree_manager,
 )
 from dazi.dazimd import DaziMdFile, discover_dazimd_files, merge_dazimd_content
-from dazi.llm import prompt_builder
+from dazi.prompt_builder import prompt_builder
 
 
 def load_dazimd(*, console: Console) -> list[DaziMdFile]:

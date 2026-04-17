@@ -12,7 +12,8 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 def patch_singletons(monkeypatch, tmp_path: Path) -> None:
     """Patch all dazi._singletons attributes with tmp_path-based instances.
 
-    Must be called BEFORE importing modules that use from dazi._singletons import X.
+    Also patches module-level references in production modules that capture
+    singleton values at import time (e.g., ``from dazi._singletons import X``).
     """
     from dazi.background import BackgroundTaskManager
     from dazi.coordinator import AutonomousTeammate
@@ -22,6 +23,7 @@ def patch_singletons(monkeypatch, tmp_path: Path) -> None:
     from dazi.memory import MemoryStore
     from dazi.permission_bridge import PermissionBridge
     from dazi.proactive import ProactiveManager
+    from dazi.settings import SettingsManager
     from dazi.skills import SkillRegistry
     from dazi.task_store import TaskStore
     from dazi.team import TeamManager
@@ -33,7 +35,7 @@ def patch_singletons(monkeypatch, tmp_path: Path) -> None:
 
     instances = {
         "memory_store": MemoryStore(data_dir / "memory"),
-        "settings_manager": MagicMock(),
+        "settings_manager": SettingsManager(project_root=data_dir, user_dir=data_dir),
         "cost_tracker": CostTracker(data_dir),
         "mcp_manager": MCPManager(),
         "skill_registry": SkillRegistry(),
@@ -50,6 +52,60 @@ def patch_singletons(monkeypatch, tmp_path: Path) -> None:
 
     for name, instance in instances.items():
         monkeypatch.setattr(f"dazi._singletons.{name}", instance)
+
+    # Patch module-level references captured at import time in production code.
+    # These modules do ``from dazi._singletons import X`` at the top level,
+    # so monkeypatch must also update their local references.
+    _MODULE_SINGLETON_MAP: dict[str, list[str]] = {
+        "dazi.graph": [
+            "background_manager",
+            "cost_tracker",
+            "mcp_manager",
+            "settings_manager",
+        ],
+        "dazi.lifecycle": [
+            "autonomous_teammate",
+            "background_manager",
+            "cost_tracker",
+            "mcp_manager",
+            "proactive_manager",
+            "teammate_runner",
+            "worktree_manager",
+        ],
+        "dazi.repl_display": [
+            "background_manager",
+            "mcp_manager",
+            "memory_store",
+            "skill_registry",
+            "task_store",
+        ],
+        "dazi.repl_commands": [
+            "autonomous_teammate",
+            "cost_tracker",
+            "mcp_manager",
+            "memory_store",
+            "proactive_manager",
+            "settings_manager",
+            "skill_registry",
+            "task_store",
+            "team_manager",
+            "worktree_manager",
+        ],
+        "dazi.llm": [
+            "memory_store",
+            "settings_manager",
+            "skill_registry",
+        ],
+        "dazi.repl_teams": [
+            "mailbox",
+            "team_manager",
+        ],
+    }
+
+    for module_name, names in _MODULE_SINGLETON_MAP.items():
+        for name in names:
+            if name in instances:
+                monkeypatch.setattr(f"{module_name}.{name}", instances[name])
 
 
 def create_mock_llm(response_text: str = "Mock response") -> AsyncMock:

@@ -63,11 +63,36 @@ class TestBuildSessionGuidance:
     def test_plan_mode(self):
         result = build_session_guidance(mode="plan")
         assert "PLAN" in result
-        assert "Do NOT make any edits" in result
+        assert "MUST NOT make any edits" in result
+        assert "Phase 1: Understand" in result
+        assert "Phase 2: Design" in result
+        assert "Phase 3: Clarify" in result
+        assert "Phase 4: Write Plan" in result
+        assert "Phase 5: Finish" in result
+        assert "plan_writer" in result
+        assert "file_reader" in result
+        assert "/go" in result
 
-    def test_has_plan(self):
+    def test_plan_mode_has_existing_plan(self):
+        result = build_session_guidance(mode="plan", has_plan=True)
+        assert "plan file already exists" in result
+        assert "overwrite it" in result
+
+    def test_plan_mode_no_existing_plan(self):
+        result = build_session_guidance(mode="plan", has_plan=False)
+        assert "No plan file exists yet" in result
+
+    def test_has_plan_execute_mode(self):
         result = build_session_guidance(mode="execute", has_plan=True)
+        assert "EXECUTE" in result
+        assert "All tools enabled" in result
         assert "plan file exists" in result
+
+    def test_no_plan_execute_mode(self):
+        result = build_session_guidance(mode="execute", has_plan=False)
+        assert "EXECUTE" in result
+        assert "All tools enabled" in result
+        assert "plan file" not in result
 
 
 # ─────────────────────────────────────────────────────────

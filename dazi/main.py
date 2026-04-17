@@ -33,8 +33,9 @@ from dazi.graph import (
     run_graph_turn,
 )
 from dazi.lifecycle import cleanup_on_exit, load_dazimd
-from dazi.llm import _get_model_name, _update_proactive_prompt
+from dazi.llm import _get_model_name
 from dazi.proactive import ProactiveSource, format_tick
+from dazi.prompt_builder import _update_proactive_prompt
 from dazi.repl_commands import handle_command
 from dazi.repl_display import get_mode_badge, print_ascii_banner, print_welcome_message
 from dazi.tokenizer import (
@@ -273,8 +274,8 @@ async def run_repl() -> None:
                         "\n[dim]Proactive mode paused. "
                         "Submit input to resume. Use /quit to exit.[/dim]"
                     )
-                else:
-                    console.print("\n[dim]Use /quit to exit.[/dim]")
+                # If during model streaming, the cancellation message was already printed
+                # in _stream_and_display, so just continue to the next prompt.
             except asyncio.CancelledError:
                 import traceback as _tb
 

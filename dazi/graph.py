@@ -6,6 +6,14 @@ streaming display, and the main execution wrapper (run_graph_turn).
 
 from __future__ import annotations
 
+import asyncio
+import os
+import select
+import signal
+import sys
+import termios
+import threading
+import tty
 import uuid
 from typing import Annotated
 
@@ -38,7 +46,6 @@ from dazi.llm import (
     _get_model_name,
     get_memory_content,
     get_skills_content,
-    prompt_builder,
 )
 from dazi.mcp_client import (
     list_mcp_resources_tool,
@@ -54,6 +61,7 @@ from dazi.permissions import (
     derive_permission_pattern,
     prompt_permission_decisions,
 )
+from dazi.prompt_builder import prompt_builder
 from dazi.registry import (
     EXECUTE_MODE_META,
     EXECUTE_MODE_TOOLS,
@@ -274,7 +282,7 @@ async def call_llm(state: AgentState) -> dict:
     memory_content = get_memory_content(user_query)
     skills_content = get_skills_content()
     rules = _get_effective_rules()
-    has_plan = mode == EXECUTE_MODE and PLAN_FILE.exists()
+    has_plan = PLAN_FILE.exists()
 
     sys_prompt = prompt_builder.build(
         mode=mode,
@@ -286,10 +294,11 @@ async def call_llm(state: AgentState) -> dict:
     )
 
     if not messages or not isinstance(messages[0], SystemMessage):
-        messages = [SystemMessage(content=sys_prompt)] + list(messages)
+        messages = [SystemMessage(content=sys_prompt), *list(messages)]
     else:
-        messages = [SystemMessage(content=sys_prompt)] + [
-            m for m in messages if not isinstance(m, SystemMessage)
+        messages = [
+            SystemMessage(content=sys_prompt),
+            *[m for m in messages if not isinstance(m, SystemMessage)],
         ]
 
     tools = PLAN_TOOLS_FULL if mode == PLAN_MODE else EXECUTE_TOOLS_FULL
@@ -627,6 +636,47 @@ def _print_tool_result_compact(content: str, *, is_error: bool = False) -> None:
         console.print(f"  [dim]\u2514 {first_line}[/dim]")
 
 
+def _watch_esc(
+    loop: asyncio.AbstractEventLoop,
+    cancel_fn,
+    done_event: threading.Event,
+) -> None:
+    """Background thread: detect standalone ESC keypress during streaming.
+
+    Puts stdin in cbreak mode, reads individual bytes, and cancels the
+    stream when a standalone ESC (not an escape sequence) is detected.
+    Restores terminal settings on exit.
+    """
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        while not done_event.is_set():
+            r, _, _ = select.select([fd], [], [], 0.1)
+            if not r:
+                continue
+            ch = os.read(fd, 1)
+            if ch != b"\x1b":
+                continue
+            # Distinguish standalone ESC from escape sequences (arrow keys, etc.)
+            r2, _, _ = select.select([fd], [], [], 0.05)
+            if r2:
+                # Escape sequence — consume remaining bytes
+                while True:
+                    r3, _, _ = select.select([fd], [], [], 0.01)
+                    if not r3:
+                        break
+                    os.read(fd, 1)
+                continue
+            # Standalone ESC — cancel streaming
+            loop.call_soon_threadsafe(cancel_fn)
+            return
+    except (OSError, termios.error):
+        pass
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
 async def _stream_and_display(
     stream,
     *,
@@ -634,30 +684,86 @@ async def _stream_and_display(
 ) -> None:
     """Consume astream_events and print live output to console.
 
-    Pure event renderer — does NOT manage the spinner lifecycle.
-    The caller (run_graph_turn) starts/stops the spinner.
-
-    Events handled:
-      - on_chat_model_stream: accumulate text for Markdown rendering
-      - on_chat_model_end: render text or tool calls
-      - on_tool_end: render compact tool results
+    Supports cancellation via:
+      - ESC keypress (background thread on stdin)
+      - Ctrl+C / SIGINT (signal handler)
     """
-    from dazi.repl_display import render_dazi_panel
+
+    stream_task = asyncio.ensure_future(_consume_stream(stream, spinner=spinner))
+
+    # ESC detection thread (only when stdin is a TTY)
+    loop = asyncio.get_running_loop()
+    done_event = threading.Event()
+    watcher: threading.Thread | None = None
+
+    if sys.stdin.isatty():
+        watcher = threading.Thread(
+            target=_watch_esc,
+            args=(loop, stream_task.cancel, done_event),
+            daemon=True,
+        )
+        watcher.start()
+
+    # SIGINT handler for Ctrl+C during streaming
+    original_handler = signal.getsignal(signal.SIGINT)
+
+    def _on_sigint(signum, frame):
+        stream_task.cancel()
+
+    signal.signal(signal.SIGINT, _on_sigint)
+
+    try:
+        await stream_task
+    except asyncio.CancelledError:
+        console.print("\n[dim]Generation cancelled.[/dim]")
+        raise KeyboardInterrupt
+    finally:
+        signal.signal(signal.SIGINT, original_handler)
+        done_event.set()
+        if watcher:
+            watcher.join(timeout=0.5)
+
+
+async def _consume_stream(
+    stream,
+    *,
+    spinner: SpinnerManager,
+) -> None:
+    """Inner loop that consumes stream events (extracted for cancellation)."""
+    from dazi.repl_display import render_dazi_panel, render_thinking_panel
 
     accumulated_text = ""
+    accumulated_thinking = ""
 
     async for event in stream:
         kind = event["event"]
 
         if kind == "on_chat_model_stream":
             chunk = event["data"]["chunk"]
-            if isinstance(chunk.content, str) and chunk.content:
+
+            # Handle reasoning/thinking content
+            reasoning = ""
+            if hasattr(chunk, "additional_kwargs"):
+                reasoning = chunk.additional_kwargs.get("reasoning_content", "")
+            if reasoning:
                 spinner.update_label("Thinking...")
+                accumulated_thinking += reasoning
+
+            # Handle regular text content
+            if isinstance(chunk.content, str) and chunk.content:
+                spinner.update_label("Responding...")
                 accumulated_text += chunk.content
 
         elif kind == "on_chat_model_end":
             output = event["data"]["output"]
             has_tool_calls = bool(output.tool_calls)
+
+            # Display thinking panel before response
+            if accumulated_thinking.strip():
+                console.print()
+                render_thinking_panel(accumulated_thinking, console)
+                accumulated_thinking = ""
+
             # Only show DAZI panel for pure text responses (no tool calls)
             if accumulated_text.strip() and not has_tool_calls:
                 console.print()
@@ -683,6 +789,9 @@ async def _stream_and_display(
             _print_tool_result_compact(content, is_error=is_error)
 
     # Handle edge case: text accumulated but stream ended without on_chat_model_end
+    if accumulated_thinking.strip():
+        console.print()
+        render_thinking_panel(accumulated_thinking, console)
     if accumulated_text.strip():
         console.print()
         render_dazi_panel(accumulated_text, console)
